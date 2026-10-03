@@ -13,6 +13,7 @@ async function bootstrap() {
     .setTitle('LMS Backend API')
     .setDescription('API documentation for the LMS Backend')
     .setVersion('1.0')
+    .addBearerAuth()
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

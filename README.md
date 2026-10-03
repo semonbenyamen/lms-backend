@@ -9,7 +9,13 @@ Backend service for the Learning Management System (LMS), built with NestJS, Pos
 - TypeScript
 - PostgreSQL 16
 - TypeORM
+- JWT Authentication
+- Argon2
 - Swagger / OpenAPI
+- Vitest
+- ESLint
+- Prettier
+- Husky
 - Docker & Docker Compose (optional)
 
 ## Prerequisites
@@ -74,15 +80,48 @@ DB_PORT=5432
 POSTGRES_DB=lms_db
 POSTGRES_USER=lms_user
 POSTGRES_PASSWORD=your_local_password
+
+AUTH_TOKEN_SECRET=your_secure_auth_token_secret
+
+JWT_SECRET=your_secure_jwt_secret
+JWT_EXPIRES_IN=15m
 ```
 
-> Do not commit the `.env` file to Git.
+> Never commit real secrets or the `.env` file to Git. Use strong, unique secret values in your local `.env` file.
+
+## Database Migrations
+
+The project uses TypeORM migrations to manage database schema changes.
+
+Run all pending migrations:
+
+```bash
+npm run migration:run
+```
+
+Generate a new migration after changing database entities:
+
+```bash
+npm run migration:generate -- src/database/migrations/MigrationName
+```
+
+Revert the latest migration:
+
+```bash
+npm run migration:revert
+```
+
+Current authentication-related migrations include tables for:
+
+- Users
+- Authentication tokens
+- Refresh tokens
 
 ## Run the Application
 
-Make sure the local PostgreSQL 16 service is running.
+Make sure PostgreSQL 16 is running and the required migrations have been applied.
 
-Then start the NestJS application in development mode:
+Start the NestJS application in development mode:
 
 ```bash
 npm run start:dev
@@ -129,6 +168,61 @@ Swagger documentation is available at:
 http://localhost:3000/api/docs
 ```
 
+Swagger can also be used to test the authentication endpoints and protected routes.
+
+## Authentication
+
+The backend supports the following authentication flow:
+
+```text
+Register
+   ↓
+Email Verification
+   ↓
+Login
+   ↓
+Access Token + Refresh Token
+   ↓
+Protected Routes
+   ↓
+Refresh Token Rotation
+   ↓
+Logout / Token Revocation
+```
+
+### Authentication Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/auth/register` | Register a new user |
+| POST | `/auth/verify-email` | Verify a user's email using an OTP |
+| POST | `/auth/resend-verification` | Request a new verification OTP |
+| POST | `/auth/login` | Login and receive access and refresh tokens |
+| POST | `/auth/refresh` | Rotate refresh token and receive new tokens |
+| POST | `/auth/logout` | Revoke a refresh token |
+| GET | `/auth/me` | Get the authenticated user's profile |
+| POST | `/auth/change-password` | Change password for an authenticated user |
+| POST | `/auth/forgot-password` | Request a password reset OTP |
+| POST | `/auth/reset-password` | Reset password using the OTP |
+| GET | `/auth/admin-test` | Example role-protected admin endpoint |
+
+## Authentication Security
+
+The authentication implementation includes:
+
+- Password hashing with Argon2
+- Email verification using OTP codes
+- HMAC-hashed authentication tokens
+- Short-lived JWT access tokens
+- Refresh tokens stored as hashes
+- Refresh token rotation
+- Refresh token revocation on logout
+- Session invalidation after password reset
+- Session invalidation after password change
+- JWT-protected routes
+- Role-based authorization
+- Generic forgot-password responses to reduce account enumeration
+
 ## Code Quality
 
 Run ESLint:
@@ -143,11 +237,41 @@ Run Prettier:
 npm run format
 ```
 
-Build the project:
+Run the test suite:
+
+```bash
+npm test
+```
+
+Run tests with coverage:
+
+```bash
+npm run test:cov
+```
+
+Build and type-check the project:
 
 ```bash
 npm run build
 ```
+
+The current backend test suite uses Vitest and includes authentication service tests.
+
+## Git Hooks
+
+The project uses Husky for pre-commit quality checks.
+
+Before a commit is created, the pre-commit hook runs:
+
+```bash
+npm run lint
+npm test
+npm run build
+```
+
+A commit is blocked if one of these checks fails.
+
+After running `npm install`, the project's `prepare` script initializes Husky automatically.
 
 ## Optional: Run PostgreSQL with Docker
 
