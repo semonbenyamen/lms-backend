@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as argon2 from 'argon2';
 import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 
 import { MailService } from '../mail/mail.service.js';
 import { UsersService } from '../users/users.service.js';
@@ -24,6 +25,8 @@ import { AuthToken, } from './entities/auth-token.entity.js';
 import { AuthTokenType } from '../common/enums/auth-token-type.enum.js';
 import { RefreshToken } from './entities/refresh-token.entity.js';
 import { TokenService } from './services/token.service.js';
+import { UserRole } from '../common/enums/user-role.enum.js';
+import ms, { type StringValue } from 'ms';
 
 @Injectable()
 export class AuthService {
@@ -32,6 +35,7 @@ export class AuthService {
     private readonly tokenService: TokenService,
     private readonly mailService: MailService,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
 
     @InjectRepository(AuthToken)
     private readonly authTokenRepository: Repository<AuthToken>,
@@ -41,7 +45,7 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto) {
-    const email = registerDto.email.trim().toLowerCase();
+    const email = this.normalizeEmail(registerDto.email);
 
     const existingUser = await this.usersService.findByEmail(email);
 
@@ -65,19 +69,11 @@ export class AuthService {
 
     await this.mailService.sendVerificationOtp(user.email, otp);
 
-    return {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      role: user.role,
-      isVerified: user.isVerified,
-      createdAt: user.createdAt,
-    };
+    return this.toUserView(user);
   }
 
   async verifyEmail(verifyEmailDto: VerifyEmailDto) {
-    const email = verifyEmailDto.email.trim().toLowerCase();
+    const email = this.normalizeEmail(verifyEmailDto.email);
 
     const user = await this.usersService.findByEmail(email);
 
@@ -137,7 +133,7 @@ export class AuthService {
   async resendVerificationCode(
     resendVerificationDto: ResendVerificationDto,
   ) {
-    const email = resendVerificationDto.email.trim().toLowerCase();
+    const email = this.normalizeEmail(resendVerificationDto.email);
 
     const user = await this.usersService.findByEmail(email);
 
@@ -189,7 +185,7 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto) {
-    const email = loginDto.email.trim().toLowerCase();
+    const email = this.normalizeEmail(loginDto.email);
 
     const user = await this.usersService.findByEmail(email);
 
@@ -212,24 +208,13 @@ export class AuthService {
       );
     }
 
-    const accessToken = await this.generateAccessToken(user);
-
-    const refreshToken = await this.createRefreshToken(user.id);
+    const tokens = await this.issueTokens(user);
 
     return {
-      accessToken,
-      refreshToken,
-      tokenType: 'Bearer',
-      expiresIn: 900,
-      user: {
-        id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-      },
-    };
-  }
+      ...tokens,
+      user: this.toUserView(user),
+    }
+  };
 
   async refresh(refreshTokenDto: RefreshTokenDto) {
     const refreshToken = refreshTokenDto.refreshToken;
@@ -278,16 +263,7 @@ export class AuthService {
       storedToken.id,
     );
 
-    const newRefreshToken = await this.createRefreshToken(user.id);
-
-    const accessToken = await this.generateAccessToken(user);
-
-    return {
-      accessToken,
-      refreshToken: newRefreshToken,
-      tokenType: 'Bearer',
-      expiresIn: 900,
-    };
+    return this.issueTokens(user);
   }
 
   async logout(refreshTokenDto: RefreshTokenDto) {
@@ -308,13 +284,7 @@ export class AuthService {
     userId: string,
     changePasswordDto: ChangePasswordDto,
   ) {
-    const user = await this.usersService.findById(userId);
-
-    if (!user) {
-      throw new UnauthorizedException(
-        'User no longer exists',
-      );
-    }
+    const user = await this.requireUser(userId);
 
     const isCurrentPasswordValid = await argon2.verify(
       user.passwordHash,
@@ -357,7 +327,7 @@ export class AuthService {
   }
 
   async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
-    const email = forgotPasswordDto.email.trim().toLowerCase();
+    const email = this.normalizeEmail(forgotPasswordDto.email);
 
     const genericResponse = {
       message:
@@ -389,7 +359,7 @@ export class AuthService {
   }
 
   async resetPassword(resetPasswordDto: ResetPasswordDto) {
-    const email = resetPasswordDto.email.trim().toLowerCase();
+    const email = this.normalizeEmail(resetPasswordDto.email);
 
     const user = await this.usersService.findByEmail(email);
 
@@ -430,23 +400,9 @@ export class AuthService {
   }
 
   async getProfile(userId: string) {
-    const user = await this.usersService.findById(userId);
+    const user = await this.requireUser(userId);
 
-    if (!user) {
-      throw new UnauthorizedException(
-        'User no longer exists',
-      );
-    }
-
-    return {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      role: user.role,
-      isVerified: user.isVerified,
-      createdAt: user.createdAt,
-    };
+    return this.toUserView(user);
   }
 
   private async createAuthToken(
@@ -528,5 +484,64 @@ export class AuthService {
     }
 
     return authToken;
+  }
+
+  private toUserView(user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    role: UserRole;
+    isVerified: boolean;
+    createdAt: Date;
+  }) {
+    return {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: user.role,
+      isVerified: user.isVerified,
+      createdAt: user.createdAt,
+    };
+  }
+
+  private getAccessTokenExpiresInSeconds(): number {
+    const expiresIn =
+      this.configService.getOrThrow<StringValue>('JWT_EXPIRES_IN');
+
+    return Math.floor(ms(expiresIn) / 1000);
+  }
+
+  private normalizeEmail(email: string): string {
+    return email.trim().toLowerCase();
+  }
+
+  private async requireUser(userId: string) {
+    const user = await this.usersService.findById(userId);
+
+    if (!user) {
+      throw new UnauthorizedException(
+        'User no longer exists',
+      );
+    }
+
+    return user;
+  }
+
+  private async issueTokens(user: {
+    id: string;
+    email: string;
+    role: string;
+  }) {
+    const accessToken = await this.generateAccessToken(user);
+    const refreshToken = await this.createRefreshToken(user.id);
+
+    return {
+      accessToken,
+      refreshToken,
+      tokenType: 'Bearer',
+      expiresIn: this.getAccessTokenExpiresInSeconds(),
+    };
   }
 }

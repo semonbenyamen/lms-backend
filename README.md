@@ -74,12 +74,7 @@ Configure the environment variables:
 ```env
 PORT=3000
 
-DB_HOST=localhost
-DB_PORT=5432
-
-POSTGRES_DB=lms_db
-POSTGRES_USER=lms_user
-POSTGRES_PASSWORD=your_local_password
+DATABASE_URL=postgresql://lms_user:your_local_password@localhost:5432/lms_db
 
 AUTH_TOKEN_SECRET=your_secure_auth_token_secret
 
@@ -162,13 +157,19 @@ A successful response should look similar to:
 
 ## API Documentation
 
-Swagger documentation is available at:
+Swagger UI is available at:
 
 ```text
 http://localhost:3000/api/docs
 ```
 
-Swagger can also be used to test the authentication endpoints and protected routes.
+The OpenAPI JSON specification is available at:
+
+```text
+http://localhost:3000/api/docs-json
+```
+
+Swagger includes request and response schemas for the authentication endpoints and can also be used to test protected routes using Bearer authentication.
 
 ## Authentication
 
@@ -204,7 +205,6 @@ Logout / Token Revocation
 | POST | `/auth/change-password` | Change password for an authenticated user |
 | POST | `/auth/forgot-password` | Request a password reset OTP |
 | POST | `/auth/reset-password` | Reset password using the OTP |
-| GET | `/auth/admin-test` | Example role-protected admin endpoint |
 
 ## Authentication Security
 
@@ -217,10 +217,11 @@ The authentication implementation includes:
 - Refresh tokens stored as hashes
 - Refresh token rotation
 - Refresh token revocation on logout
-- Session invalidation after password reset
-- Session invalidation after password change
+- Refresh token revocation after password reset
+- Refresh token revocation after password change
 - JWT-protected routes
 - Role-based authorization
+- Rate limiting on sensitive authentication endpoints
 - Generic forgot-password responses to reduce account enumeration
 
 ## Code Quality

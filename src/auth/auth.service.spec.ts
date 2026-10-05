@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as argon2 from 'argon2';
+import { ConfigService } from '@nestjs/config';
 
 import { MailService } from '../mail/mail.service.js';
 import { UsersService } from '../users/users.service.js';
@@ -41,6 +42,10 @@ describe('AuthService', () => {
     signAsync: vi.fn(),
   };
 
+  const configServiceMock = {
+    getOrThrow: vi.fn().mockReturnValue('15m'),
+  };
+
   const authTokenRepositoryMock = {
     create: vi.fn(),
     save: vi.fn(),
@@ -77,6 +82,10 @@ describe('AuthService', () => {
           {
             provide: JwtService,
             useValue: jwtServiceMock,
+          },
+          {
+            provide: ConfigService,
+            useValue: configServiceMock,
           },
           {
             provide: getRepositoryToken(AuthToken),
