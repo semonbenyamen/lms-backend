@@ -20,10 +20,8 @@ import { RegisterDto } from './dto/register.dto.js';
 import { ResendVerificationDto } from './dto/resend-verification.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { VerifyEmailDto } from './dto/verify-email.dto.js';
-import {
-  AuthToken,
-  AuthTokenType,
-} from './entities/auth-token.entity.js';
+import { AuthToken, } from './entities/auth-token.entity.js';
+import { AuthTokenType } from '../common/enums/auth-token-type.enum.js';
 import { RefreshToken } from './entities/refresh-token.entity.js';
 import { TokenService } from './services/token.service.js';
 
@@ -60,17 +58,10 @@ export class AuthService {
       passwordHash,
     });
 
-    const otp = this.tokenService.generateOtp();
-    const tokenHash = this.tokenService.hashToken(otp);
-
-    const authToken = this.authTokenRepository.create({
-      userId: user.id,
-      type: AuthTokenType.EMAIL_VERIFICATION,
-      tokenHash,
-      expiresAt: this.tokenService.getOtpExpiration(),
-    });
-
-    await this.authTokenRepository.save(authToken);
+    const otp = await this.createAuthToken(
+      user.id,
+      AuthTokenType.EMAIL_VERIFICATION,
+    );
 
     await this.mailService.sendVerificationOtp(user.email, otp);
 
@@ -185,17 +176,10 @@ export class AuthService {
       type: AuthTokenType.EMAIL_VERIFICATION,
     });
 
-    const otp = this.tokenService.generateOtp();
-    const tokenHash = this.tokenService.hashToken(otp);
-
-    const authToken = this.authTokenRepository.create({
-      userId: user.id,
-      type: AuthTokenType.EMAIL_VERIFICATION,
-      tokenHash,
-      expiresAt: this.tokenService.getOtpExpiration(),
-    });
-
-    await this.authTokenRepository.save(authToken);
+    const otp = await this.createAuthToken(
+      user.id,
+      AuthTokenType.EMAIL_VERIFICATION,
+    );
 
     await this.mailService.sendVerificationOtp(user.email, otp);
 
@@ -228,29 +212,9 @@ export class AuthService {
       );
     }
 
-    const accessToken = await this.jwtService.signAsync({
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    });
+    const accessToken = await this.generateAccessToken(user);
 
-    const refreshToken =
-      this.tokenService.generateRefreshToken();
-
-    const refreshTokenHash =
-      this.tokenService.hashToken(refreshToken);
-
-    const refreshTokenEntity =
-      this.refreshTokenRepository.create({
-        userId: user.id,
-        tokenHash: refreshTokenHash,
-        expiresAt:
-          this.tokenService.getRefreshTokenExpiration(),
-      });
-
-    await this.refreshTokenRepository.save(
-      refreshTokenEntity,
-    );
+    const refreshToken = await this.createRefreshToken(user.id);
 
     return {
       accessToken,
@@ -314,29 +278,9 @@ export class AuthService {
       storedToken.id,
     );
 
-    const newRefreshToken =
-      this.tokenService.generateRefreshToken();
+    const newRefreshToken = await this.createRefreshToken(user.id);
 
-    const newRefreshTokenHash =
-      this.tokenService.hashToken(newRefreshToken);
-
-    const newRefreshTokenEntity =
-      this.refreshTokenRepository.create({
-        userId: user.id,
-        tokenHash: newRefreshTokenHash,
-        expiresAt:
-          this.tokenService.getRefreshTokenExpiration(),
-      });
-
-    await this.refreshTokenRepository.save(
-      newRefreshTokenEntity,
-    );
-
-    const accessToken = await this.jwtService.signAsync({
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    });
+    const accessToken = await this.generateAccessToken(user);
 
     return {
       accessToken,
@@ -431,17 +375,10 @@ export class AuthService {
       type: AuthTokenType.PASSWORD_RESET,
     });
 
-    const otp = this.tokenService.generateOtp();
-    const tokenHash = this.tokenService.hashToken(otp);
-
-    const authToken = this.authTokenRepository.create({
-      userId: user.id,
-      type: AuthTokenType.PASSWORD_RESET,
-      tokenHash,
-      expiresAt: this.tokenService.getOtpExpiration(),
-    });
-
-    await this.authTokenRepository.save(authToken);
+    const otp = await this.createAuthToken(
+      user.id,
+      AuthTokenType.PASSWORD_RESET,
+    );
 
     await this.mailService.sendPasswordResetOtp(
       user.email,
@@ -462,40 +399,12 @@ export class AuthService {
       );
     }
 
-    const authToken = await this.authTokenRepository.findOne({
-      where: {
-        userId: user.id,
-        type: AuthTokenType.PASSWORD_RESET,
-      },
-      order: {
-        createdAt: 'DESC',
-      },
-    });
-
-    if (!authToken) {
-      throw new BadRequestException(
-        'Invalid or expired password reset code',
-      );
-    }
-
-    if (authToken.expiresAt.getTime() < Date.now()) {
-      await this.authTokenRepository.delete(authToken.id);
-
-      throw new BadRequestException(
-        'Invalid or expired password reset code',
-      );
-    }
-
-    const isValidOtp = this.tokenService.verifyToken(
+    await this.validateAuthToken(
+      user.id,
+      AuthTokenType.PASSWORD_RESET,
       resetPasswordDto.otp,
-      authToken.tokenHash,
+      'Invalid or expired password reset code',
     );
-
-    if (!isValidOtp) {
-      throw new BadRequestException(
-        'Invalid or expired password reset code',
-      );
-    }
 
     const passwordHash = await argon2.hash(
       resetPasswordDto.newPassword,
@@ -538,5 +447,86 @@ export class AuthService {
       isVerified: user.isVerified,
       createdAt: user.createdAt,
     };
+  }
+
+  private async createAuthToken(
+    userId: string,
+    type: AuthTokenType,
+  ): Promise<string> {
+    const otp = this.tokenService.generateOtp();
+
+    const authToken = this.authTokenRepository.create({
+      userId,
+      type,
+      tokenHash: this.tokenService.hashToken(otp),
+      expiresAt: this.tokenService.getOtpExpiration(),
+    });
+
+    await this.authTokenRepository.save(authToken);
+
+    return otp;
+  }
+
+  private async generateAccessToken(user: {
+    id: string;
+    email: string;
+    role: string;
+  }): Promise<string> {
+    return this.jwtService.signAsync({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    });
+  }
+
+  private async createRefreshToken(userId: string): Promise<string> {
+    const refreshToken = this.tokenService.generateRefreshToken();
+
+    const refreshTokenEntity = this.refreshTokenRepository.create({
+      userId,
+      tokenHash: this.tokenService.hashToken(refreshToken),
+      expiresAt: this.tokenService.getRefreshTokenExpiration(),
+    });
+
+    await this.refreshTokenRepository.save(refreshTokenEntity);
+
+    return refreshToken;
+  }
+
+  private async validateAuthToken(
+    userId: string,
+    type: AuthTokenType,
+    otp: string,
+    errorMessage: string,
+  ): Promise<AuthToken> {
+    const authToken = await this.authTokenRepository.findOne({
+      where: {
+        userId,
+        type,
+      },
+      order: {
+        createdAt: 'DESC',
+      },
+    });
+
+    if (!authToken) {
+      throw new BadRequestException(errorMessage);
+    }
+
+    if (authToken.expiresAt.getTime() < Date.now()) {
+      await this.authTokenRepository.delete(authToken.id);
+      throw new BadRequestException(errorMessage);
+    }
+
+    const isValidOtp = this.tokenService.verifyToken(
+      otp,
+      authToken.tokenHash,
+    );
+
+    if (!isValidOtp) {
+      throw new BadRequestException(errorMessage);
+    }
+
+    return authToken;
   }
 }

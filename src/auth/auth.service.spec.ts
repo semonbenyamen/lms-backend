@@ -7,10 +7,8 @@ import * as argon2 from 'argon2';
 import { MailService } from '../mail/mail.service.js';
 import { UsersService } from '../users/users.service.js';
 import { AuthService } from './auth.service.js';
-import {
-  AuthToken,
-  AuthTokenType,
-} from './entities/auth-token.entity.js';
+import { AuthToken, } from './entities/auth-token.entity.js';
+import { AuthTokenType } from '../common/enums/auth-token-type.enum.js';
 import { RefreshToken } from './entities/refresh-token.entity.js';
 import { TokenService } from './services/token.service.js';
 
