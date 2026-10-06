@@ -7,11 +7,8 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity.js';
+import { AuthTokenType } from '../../common/enums/auth-token-type.enum.js';
 
-export enum AuthTokenType {
-  EMAIL_VERIFICATION = 'email_verification',
-  PASSWORD_RESET = 'password_reset',
-}
 
 @Entity('auth_tokens')
 export class AuthToken {

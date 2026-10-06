@@ -11,6 +11,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { RolesGuard } from './guards/roles.guard.js';
 import { RefreshToken } from './entities/refresh-token.entity.js';
+import type { StringValue } from 'ms';
 
 @Module({
   imports: [
@@ -25,7 +26,7 @@ import { RefreshToken } from './entities/refresh-token.entity.js';
       useFactory: (configService: ConfigService) => ({
         secret: configService.getOrThrow<string>('JWT_SECRET'),
         signOptions: {
-          expiresIn: '15m',
+          expiresIn: configService.getOrThrow<StringValue>('JWT_EXPIRES_IN'),
         },
       }),
     }),

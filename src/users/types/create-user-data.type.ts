@@ -1,6 +1,6 @@
-export interface CreateUserData {
-  email: string;
-  passwordHash: string;
-  firstName: string;
-  lastName: string;
-}
+import { User } from '../entities/user.entity.js';
+
+export type CreateUserData = Pick<
+  User,
+  'firstName' | 'lastName' | 'email' | 'passwordHash'
+>;

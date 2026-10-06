@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as argon2 from 'argon2';
 import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 
 import { MailService } from '../mail/mail.service.js';
 import { UsersService } from '../users/users.service.js';
@@ -20,12 +21,12 @@ import { RegisterDto } from './dto/register.dto.js';
 import { ResendVerificationDto } from './dto/resend-verification.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { VerifyEmailDto } from './dto/verify-email.dto.js';
-import {
-  AuthToken,
-  AuthTokenType,
-} from './entities/auth-token.entity.js';
+import { AuthToken, } from './entities/auth-token.entity.js';
+import { AuthTokenType } from '../common/enums/auth-token-type.enum.js';
 import { RefreshToken } from './entities/refresh-token.entity.js';
 import { TokenService } from './services/token.service.js';
+import { UserRole } from '../common/enums/user-role.enum.js';
+import ms, { type StringValue } from 'ms';
 
 @Injectable()
 export class AuthService {
@@ -34,6 +35,7 @@ export class AuthService {
     private readonly tokenService: TokenService,
     private readonly mailService: MailService,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
 
     @InjectRepository(AuthToken)
     private readonly authTokenRepository: Repository<AuthToken>,
@@ -43,7 +45,7 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto) {
-    const email = registerDto.email.trim().toLowerCase();
+    const email = this.normalizeEmail(registerDto.email);
 
     const existingUser = await this.usersService.findByEmail(email);
 
@@ -60,33 +62,18 @@ export class AuthService {
       passwordHash,
     });
 
-    const otp = this.tokenService.generateOtp();
-    const tokenHash = this.tokenService.hashToken(otp);
-
-    const authToken = this.authTokenRepository.create({
-      userId: user.id,
-      type: AuthTokenType.EMAIL_VERIFICATION,
-      tokenHash,
-      expiresAt: this.tokenService.getOtpExpiration(),
-    });
-
-    await this.authTokenRepository.save(authToken);
+    const otp = await this.createAuthToken(
+      user.id,
+      AuthTokenType.EMAIL_VERIFICATION,
+    );
 
     await this.mailService.sendVerificationOtp(user.email, otp);
 
-    return {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      role: user.role,
-      isVerified: user.isVerified,
-      createdAt: user.createdAt,
-    };
+    return this.toUserView(user);
   }
 
   async verifyEmail(verifyEmailDto: VerifyEmailDto) {
-    const email = verifyEmailDto.email.trim().toLowerCase();
+    const email = this.normalizeEmail(verifyEmailDto.email);
 
     const user = await this.usersService.findByEmail(email);
 
@@ -146,7 +133,7 @@ export class AuthService {
   async resendVerificationCode(
     resendVerificationDto: ResendVerificationDto,
   ) {
-    const email = resendVerificationDto.email.trim().toLowerCase();
+    const email = this.normalizeEmail(resendVerificationDto.email);
 
     const user = await this.usersService.findByEmail(email);
 
@@ -185,17 +172,10 @@ export class AuthService {
       type: AuthTokenType.EMAIL_VERIFICATION,
     });
 
-    const otp = this.tokenService.generateOtp();
-    const tokenHash = this.tokenService.hashToken(otp);
-
-    const authToken = this.authTokenRepository.create({
-      userId: user.id,
-      type: AuthTokenType.EMAIL_VERIFICATION,
-      tokenHash,
-      expiresAt: this.tokenService.getOtpExpiration(),
-    });
-
-    await this.authTokenRepository.save(authToken);
+    const otp = await this.createAuthToken(
+      user.id,
+      AuthTokenType.EMAIL_VERIFICATION,
+    );
 
     await this.mailService.sendVerificationOtp(user.email, otp);
 
@@ -205,7 +185,7 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto) {
-    const email = loginDto.email.trim().toLowerCase();
+    const email = this.normalizeEmail(loginDto.email);
 
     const user = await this.usersService.findByEmail(email);
 
@@ -228,44 +208,13 @@ export class AuthService {
       );
     }
 
-    const accessToken = await this.jwtService.signAsync({
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    });
-
-    const refreshToken =
-      this.tokenService.generateRefreshToken();
-
-    const refreshTokenHash =
-      this.tokenService.hashToken(refreshToken);
-
-    const refreshTokenEntity =
-      this.refreshTokenRepository.create({
-        userId: user.id,
-        tokenHash: refreshTokenHash,
-        expiresAt:
-          this.tokenService.getRefreshTokenExpiration(),
-      });
-
-    await this.refreshTokenRepository.save(
-      refreshTokenEntity,
-    );
+    const tokens = await this.issueTokens(user);
 
     return {
-      accessToken,
-      refreshToken,
-      tokenType: 'Bearer',
-      expiresIn: 900,
-      user: {
-        id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-      },
-    };
-  }
+      ...tokens,
+      user: this.toUserView(user),
+    }
+  };
 
   async refresh(refreshTokenDto: RefreshTokenDto) {
     const refreshToken = refreshTokenDto.refreshToken;
@@ -314,36 +263,7 @@ export class AuthService {
       storedToken.id,
     );
 
-    const newRefreshToken =
-      this.tokenService.generateRefreshToken();
-
-    const newRefreshTokenHash =
-      this.tokenService.hashToken(newRefreshToken);
-
-    const newRefreshTokenEntity =
-      this.refreshTokenRepository.create({
-        userId: user.id,
-        tokenHash: newRefreshTokenHash,
-        expiresAt:
-          this.tokenService.getRefreshTokenExpiration(),
-      });
-
-    await this.refreshTokenRepository.save(
-      newRefreshTokenEntity,
-    );
-
-    const accessToken = await this.jwtService.signAsync({
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    });
-
-    return {
-      accessToken,
-      refreshToken: newRefreshToken,
-      tokenType: 'Bearer',
-      expiresIn: 900,
-    };
+    return this.issueTokens(user);
   }
 
   async logout(refreshTokenDto: RefreshTokenDto) {
@@ -364,13 +284,7 @@ export class AuthService {
     userId: string,
     changePasswordDto: ChangePasswordDto,
   ) {
-    const user = await this.usersService.findById(userId);
-
-    if (!user) {
-      throw new UnauthorizedException(
-        'User no longer exists',
-      );
-    }
+    const user = await this.requireUser(userId);
 
     const isCurrentPasswordValid = await argon2.verify(
       user.passwordHash,
@@ -413,7 +327,7 @@ export class AuthService {
   }
 
   async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
-    const email = forgotPasswordDto.email.trim().toLowerCase();
+    const email = this.normalizeEmail(forgotPasswordDto.email);
 
     const genericResponse = {
       message:
@@ -431,17 +345,10 @@ export class AuthService {
       type: AuthTokenType.PASSWORD_RESET,
     });
 
-    const otp = this.tokenService.generateOtp();
-    const tokenHash = this.tokenService.hashToken(otp);
-
-    const authToken = this.authTokenRepository.create({
-      userId: user.id,
-      type: AuthTokenType.PASSWORD_RESET,
-      tokenHash,
-      expiresAt: this.tokenService.getOtpExpiration(),
-    });
-
-    await this.authTokenRepository.save(authToken);
+    const otp = await this.createAuthToken(
+      user.id,
+      AuthTokenType.PASSWORD_RESET,
+    );
 
     await this.mailService.sendPasswordResetOtp(
       user.email,
@@ -452,7 +359,7 @@ export class AuthService {
   }
 
   async resetPassword(resetPasswordDto: ResetPasswordDto) {
-    const email = resetPasswordDto.email.trim().toLowerCase();
+    const email = this.normalizeEmail(resetPasswordDto.email);
 
     const user = await this.usersService.findByEmail(email);
 
@@ -462,40 +369,12 @@ export class AuthService {
       );
     }
 
-    const authToken = await this.authTokenRepository.findOne({
-      where: {
-        userId: user.id,
-        type: AuthTokenType.PASSWORD_RESET,
-      },
-      order: {
-        createdAt: 'DESC',
-      },
-    });
-
-    if (!authToken) {
-      throw new BadRequestException(
-        'Invalid or expired password reset code',
-      );
-    }
-
-    if (authToken.expiresAt.getTime() < Date.now()) {
-      await this.authTokenRepository.delete(authToken.id);
-
-      throw new BadRequestException(
-        'Invalid or expired password reset code',
-      );
-    }
-
-    const isValidOtp = this.tokenService.verifyToken(
+    await this.validateAuthToken(
+      user.id,
+      AuthTokenType.PASSWORD_RESET,
       resetPasswordDto.otp,
-      authToken.tokenHash,
+      'Invalid or expired password reset code',
     );
-
-    if (!isValidOtp) {
-      throw new BadRequestException(
-        'Invalid or expired password reset code',
-      );
-    }
 
     const passwordHash = await argon2.hash(
       resetPasswordDto.newPassword,
@@ -521,14 +400,101 @@ export class AuthService {
   }
 
   async getProfile(userId: string) {
-    const user = await this.usersService.findById(userId);
+    const user = await this.requireUser(userId);
 
-    if (!user) {
-      throw new UnauthorizedException(
-        'User no longer exists',
-      );
+    return this.toUserView(user);
+  }
+
+  private async createAuthToken(
+    userId: string,
+    type: AuthTokenType,
+  ): Promise<string> {
+    const otp = this.tokenService.generateOtp();
+
+    const authToken = this.authTokenRepository.create({
+      userId,
+      type,
+      tokenHash: this.tokenService.hashToken(otp),
+      expiresAt: this.tokenService.getOtpExpiration(),
+    });
+
+    await this.authTokenRepository.save(authToken);
+
+    return otp;
+  }
+
+  private async generateAccessToken(user: {
+    id: string;
+    email: string;
+    role: string;
+  }): Promise<string> {
+    return this.jwtService.signAsync({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    });
+  }
+
+  private async createRefreshToken(userId: string): Promise<string> {
+    const refreshToken = this.tokenService.generateRefreshToken();
+
+    const refreshTokenEntity = this.refreshTokenRepository.create({
+      userId,
+      tokenHash: this.tokenService.hashToken(refreshToken),
+      expiresAt: this.tokenService.getRefreshTokenExpiration(),
+    });
+
+    await this.refreshTokenRepository.save(refreshTokenEntity);
+
+    return refreshToken;
+  }
+
+  private async validateAuthToken(
+    userId: string,
+    type: AuthTokenType,
+    otp: string,
+    errorMessage: string,
+  ): Promise<AuthToken> {
+    const authToken = await this.authTokenRepository.findOne({
+      where: {
+        userId,
+        type,
+      },
+      order: {
+        createdAt: 'DESC',
+      },
+    });
+
+    if (!authToken) {
+      throw new BadRequestException(errorMessage);
     }
 
+    if (authToken.expiresAt.getTime() < Date.now()) {
+      await this.authTokenRepository.delete(authToken.id);
+      throw new BadRequestException(errorMessage);
+    }
+
+    const isValidOtp = this.tokenService.verifyToken(
+      otp,
+      authToken.tokenHash,
+    );
+
+    if (!isValidOtp) {
+      throw new BadRequestException(errorMessage);
+    }
+
+    return authToken;
+  }
+
+  private toUserView(user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    role: UserRole;
+    isVerified: boolean;
+    createdAt: Date;
+  }) {
     return {
       id: user.id,
       firstName: user.firstName,
@@ -537,6 +503,45 @@ export class AuthService {
       role: user.role,
       isVerified: user.isVerified,
       createdAt: user.createdAt,
+    };
+  }
+
+  private getAccessTokenExpiresInSeconds(): number {
+    const expiresIn =
+      this.configService.getOrThrow<StringValue>('JWT_EXPIRES_IN');
+
+    return Math.floor(ms(expiresIn) / 1000);
+  }
+
+  private normalizeEmail(email: string): string {
+    return email.trim().toLowerCase();
+  }
+
+  private async requireUser(userId: string) {
+    const user = await this.usersService.findById(userId);
+
+    if (!user) {
+      throw new UnauthorizedException(
+        'User no longer exists',
+      );
+    }
+
+    return user;
+  }
+
+  private async issueTokens(user: {
+    id: string;
+    email: string;
+    role: string;
+  }) {
+    const accessToken = await this.generateAccessToken(user);
+    const refreshToken = await this.createRefreshToken(user.id);
+
+    return {
+      accessToken,
+      refreshToken,
+      tokenType: 'Bearer',
+      expiresIn: this.getAccessTokenExpiresInSeconds(),
     };
   }
 }

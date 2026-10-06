@@ -5,12 +5,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-
-export enum UserRole {
-  STUDENT = 'student',
-  INSTRUCTOR = 'instructor',
-  ADMIN = 'admin',
-}
+import { UserRole } from '../../common/enums/user-role.enum.js';
 
 @Entity('users')
 export class User {

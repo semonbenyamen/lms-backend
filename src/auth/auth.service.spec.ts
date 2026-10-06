@@ -3,14 +3,13 @@ import { JwtService } from '@nestjs/jwt';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as argon2 from 'argon2';
+import { ConfigService } from '@nestjs/config';
 
 import { MailService } from '../mail/mail.service.js';
 import { UsersService } from '../users/users.service.js';
 import { AuthService } from './auth.service.js';
-import {
-  AuthToken,
-  AuthTokenType,
-} from './entities/auth-token.entity.js';
+import { AuthToken, } from './entities/auth-token.entity.js';
+import { AuthTokenType } from '../common/enums/auth-token-type.enum.js';
 import { RefreshToken } from './entities/refresh-token.entity.js';
 import { TokenService } from './services/token.service.js';
 
@@ -41,6 +40,10 @@ describe('AuthService', () => {
 
   const jwtServiceMock = {
     signAsync: vi.fn(),
+  };
+
+  const configServiceMock = {
+    getOrThrow: vi.fn().mockReturnValue('15m'),
   };
 
   const authTokenRepositoryMock = {
@@ -79,6 +82,10 @@ describe('AuthService', () => {
           {
             provide: JwtService,
             useValue: jwtServiceMock,
+          },
+          {
+            provide: ConfigService,
+            useValue: configServiceMock,
           },
           {
             provide: getRepositoryToken(AuthToken),
