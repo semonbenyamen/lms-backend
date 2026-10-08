@@ -23,24 +23,10 @@ export class UsersService {
     return this.usersRepository.save(user);
   }
 
-  async markAsVerified(user: User): Promise<User> {
-    user.isVerified = true;
-
-    return this.usersRepository.save(user);
-  }
-
   async findById(id: string) {
     return this.usersRepository.findOne({
       where: { id },
     });
   }
 
-  async updatePassword(
-    userId: string,
-    passwordHash: string,
-  ): Promise<void> {
-    await this.usersRepository.update(userId, {
-      passwordHash,
-    });
-  }
 }

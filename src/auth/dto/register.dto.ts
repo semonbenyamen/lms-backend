@@ -4,7 +4,9 @@ import {
   IsString,
   MaxLength,
   MinLength,
+  IsStrongPassword,
 } from 'class-validator';
+import { Match } from '../../common/validators/match.decorator.js';
 
 export class RegisterDto {
   @ApiProperty({
@@ -42,5 +44,16 @@ export class RegisterDto {
   @IsString()
   @MinLength(8)
   @MaxLength(128)
+  @IsStrongPassword()
   password: string;
+
+  @ApiProperty({
+    example: 'StrongPassword123',
+    description: 'Must match the password field',
+  })
+  @IsString()
+  @Match('password', {
+    message: 'Passwords do not match',
+  })
+  confirmPassword: string;
 }
