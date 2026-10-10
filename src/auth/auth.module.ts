@@ -18,7 +18,6 @@ import type { StringValue } from 'ms';
     TypeOrmModule.forFeature([AuthToken, RefreshToken]),
     UsersModule,
     MailModule,
-    
 
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -33,6 +32,7 @@ import type { StringValue } from 'ms';
   ],
 
   controllers: [AuthController],
-  providers: [AuthService, TokenService, JwtAuthGuard, RolesGuard,],
+  providers: [AuthService, TokenService, JwtAuthGuard, RolesGuard],
+  exports: [AuthService, JwtModule, JwtAuthGuard, RolesGuard],
 })
 export class AuthModule {}

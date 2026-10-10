@@ -1,16 +1,15 @@
 import { Type, applyDecorators } from '@nestjs/common';
-import {
-  ApiExtraModels,
-  ApiResponse,
-  getSchemaPath,
-} from '@nestjs/swagger';
+import { ApiExtraModels, ApiResponse, getSchemaPath } from '@nestjs/swagger';
 
 import { ApiResponseDto } from '../dto/api-response.dto.js';
 
 export function ApiSuccessResponse(
   model: Type<unknown>,
   status: number = 200,
+  options?: { isArray?: boolean },
 ) {
+  const isArray = options?.isArray ?? false;
+
   return applyDecorators(
     ApiExtraModels(ApiResponseDto, model),
     ApiResponse({
@@ -26,9 +25,16 @@ export function ApiSuccessResponse(
                 type: 'number',
                 example: status,
               },
-              data: {
-                $ref: getSchemaPath(model),
-              },
+              data: isArray
+                ? {
+                    type: 'array',
+                    items: {
+                      $ref: getSchemaPath(model),
+                    },
+                  }
+                : {
+                    $ref: getSchemaPath(model),
+                  },
             },
           },
         ],
