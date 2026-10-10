@@ -7,4 +7,7 @@ export const envValidationSchema = Joi.object({
   JWT_EXPIRES_IN: Joi.string()
     .pattern(/^[1-9]\d*(ms|s|m|h|d|w|y)$/)
     .required(),
+
+  MAIL_USER: Joi.string().email().required(),
+  MAIL_APP_PASSWORD: Joi.string().required(),
 });
