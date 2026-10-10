@@ -48,7 +48,7 @@ export class RegisterDto {
   password: string;
 
   @ApiProperty({
-    example: 'StrongPassword123',
+    example: 'StrongPassword123!',
     description: 'Must match the password field',
   })
   @IsString()
