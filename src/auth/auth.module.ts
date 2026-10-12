@@ -1,25 +1,25 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import type { StringValue } from 'ms';
+
+import { MailModule } from '../mail/mail.module.js';
+import { User } from '../users/entities/user.entity.js';
 import { UsersModule } from '../users/users.module.js';
 import { AuthController } from './auth.controller.js';
-import { AuthService } from './auth.service.js';
 import { AuthToken } from './entities/auth-token.entity.js';
-import { TokenService } from './services/token.service.js';
-import { MailModule } from '../mail/mail.module.js';
-import { JwtModule } from '@nestjs/jwt';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { RefreshToken } from './entities/refresh-token.entity.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { RolesGuard } from './guards/roles.guard.js';
-import { RefreshToken } from './entities/refresh-token.entity.js';
-import type { StringValue } from 'ms';
+import { AuthUserService } from './services/auth-user.service.js';
+import { StudentAuthService } from './student-auth.service.js';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([AuthToken, RefreshToken]),
+    TypeOrmModule.forFeature([AuthToken, RefreshToken, User]),
     UsersModule,
     MailModule,
-    
-
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -31,8 +31,7 @@ import type { StringValue } from 'ms';
       }),
     }),
   ],
-
   controllers: [AuthController],
-  providers: [AuthService, TokenService, JwtAuthGuard, RolesGuard,],
+  providers: [StudentAuthService, AuthUserService, JwtAuthGuard, RolesGuard],
 })
 export class AuthModule {}
