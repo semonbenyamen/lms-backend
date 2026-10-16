@@ -28,7 +28,7 @@ export class CoursesService {
       throw new ForbiddenException('Only instructors can create courses');
     }
 
-    const course = this.coursesRepository.create({
+    const course = await this.coursesRepository.create({
       title: createCourseDto.title,
       description: createCourseDto.description ?? null,
       instructorId: user.sub,

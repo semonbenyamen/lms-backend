@@ -6,8 +6,10 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
+  
   UpdateDateColumn,
 } from 'typeorm';
+import type { Relation } from 'typeorm';
 
 import { User } from '../../users/entities/user.entity.js';
 
@@ -26,11 +28,9 @@ export class Course {
   @Column({ name: 'instructor_id', type: 'uuid' })
   instructorId: string;
 
-  @ManyToOne(() => User, {
-    onDelete: 'CASCADE',
-  })
+  @ManyToOne(() => User, (user) => user.courses)
   @JoinColumn({ name: 'instructor_id' })
-  instructor: User;
+  instructor: Relation<User>;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
