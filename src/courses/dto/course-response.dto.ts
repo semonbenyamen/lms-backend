@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CourseResponseDto {
   @ApiProperty({
@@ -17,9 +17,55 @@ export class CourseResponseDto {
     example:
       'An in-depth guide to building scalable NestJS enterprise applications.',
     description: 'The description of the course',
+  })
+  description: string;
+
+  @ApiProperty({
+    example: 'Backend Development',
+    description: 'The category of the course',
+  })
+  category: string;
+
+  @ApiProperty({
+    example: ['NestJS', 'TypeORM', 'PostgreSQL'],
+    description: 'List of topics covered in the course',
+    type: [String],
+  })
+  topics: string[];
+
+  @ApiPropertyOptional({
+    example: 'intermediate',
+    description: 'Difficulty level of the course',
     nullable: true,
   })
-  description: string | null;
+  difficulty: string | null;
+
+  @ApiProperty({
+    example: 'en',
+    description: 'Language of the course',
+  })
+  language: string;
+
+  @ApiPropertyOptional({
+    example: ['Basic TypeScript', 'Node.js fundamentals'],
+    description: 'Prerequisites for taking the course',
+    type: [String],
+    nullable: true,
+  })
+  prerequisites: string[] | null;
+
+  @ApiPropertyOptional({
+    example: 120,
+    description: 'Estimated duration in minutes',
+    nullable: true,
+  })
+  estimatedDuration: number | null;
+
+  @ApiProperty({
+    example: false,
+    description: 'Whether the course is published for student viewing',
+  })
+  isPublished: boolean;
 
   @ApiProperty({
     example: '550e8400-e29b-41d4-a716-446655440001',

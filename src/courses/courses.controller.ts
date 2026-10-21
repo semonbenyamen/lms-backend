@@ -39,13 +39,13 @@ export class CoursesController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.INSTRUCTOR)
+  @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Create a new course (Instructor only)' })
+  @ApiOperation({ summary: 'Create a new course (Instructor or Admin)' })
   @ApiSuccessResponse(CourseResponseDto, HttpStatus.CREATED)
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
-    description: 'Invalid request body',
+    description: 'Invalid request body or validation failed',
   })
   @ApiResponse({
     status: HttpStatus.UNAUTHORIZED,
@@ -53,7 +53,7 @@ export class CoursesController {
   })
   @ApiResponse({
     status: HttpStatus.FORBIDDEN,
-    description: 'Forbidden - only instructors can create courses',
+    description: 'Forbidden - only instructors and admins can create courses',
   })
   create(
     @Body() createCourseDto: CreateCourseDto,
@@ -65,20 +65,33 @@ export class CoursesController {
   @Get()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'List all courses' })
+  @ApiOperation({
+    summary:
+      'List courses with pagination (Students see only published courses)',
+  })
   @ApiSuccessResponse(CourseResponseDto, HttpStatus.OK, { isArray: true })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Invalid pagination query parameters',
+  })
   @ApiResponse({
     status: HttpStatus.UNAUTHORIZED,
     description: 'Authentication required',
   })
-  findAll(@Query() paginationQuery: PaginationQueryDto) {
-    return this.coursesService.findAll(paginationQuery);
+  findAll(
+    @Query() paginationQuery: PaginationQueryDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.coursesService.findAll(paginationQuery, request.user);
   }
 
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get course details by ID' })
+  @ApiOperation({
+    summary:
+      'Get course details by ID with full content structure (Sections, Lessons, ContentItems)',
+  })
   @ApiSuccessResponse(CourseResponseDto, HttpStatus.OK)
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
@@ -90,10 +103,13 @@ export class CoursesController {
   })
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,
-    description: 'Course not found',
+    description: 'Course not found or unpublished',
   })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.coursesService.findById(id);
+  findOne(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.coursesService.findById(id, request.user);
   }
 
   @Patch(':id')
@@ -119,7 +135,7 @@ export class CoursesController {
     description: 'Course not found',
   })
   update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() updateCourseDto: UpdateCourseDto,
     @Req() request: AuthenticatedRequest,
   ) {
@@ -153,7 +169,7 @@ export class CoursesController {
     description: 'Course not found',
   })
   remove(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Req() request: AuthenticatedRequest,
   ) {
     return this.coursesService.remove(id, request.user);

@@ -7,7 +7,10 @@ import { CoursesService } from './courses.service.js';
 import { Course } from './entities/course.entity.js';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Course]), AuthModule],
+  imports: [
+    TypeOrmModule.forFeature([Course]),
+    AuthModule,
+  ],
   controllers: [CoursesController],
   providers: [CoursesService],
   exports: [CoursesService],
