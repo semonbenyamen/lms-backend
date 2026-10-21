@@ -14,6 +14,7 @@ import { HealthModule } from './health/health.module.js';
 import { UsersModule } from './users/users.module.js';
 import { CoursesModule } from './courses/courses.module.js';
 import { SectionsModule } from './sections/sections.module.js';
+import { LessonsModule } from './lessons/lessons.module.js';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { SectionsModule } from './sections/sections.module.js';
     AuthModule,
     CoursesModule,
     SectionsModule,
+    LessonsModule,
   ],
 
   controllers: [AppController],

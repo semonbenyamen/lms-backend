@@ -5,6 +5,7 @@ import {
   Index,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   Unique,
   UpdateDateColumn,
@@ -12,6 +13,7 @@ import {
 import type { Relation } from 'typeorm';
 
 import { Course } from '../../courses/entities/course.entity.js';
+import { Lesson } from '../../lessons/entities/lesson.entity.js';
 
 @Entity('sections')
 @Unique('UQ_sections_course_order', ['courseId', 'orderIndex'])
@@ -32,6 +34,9 @@ export class Section {
 
   @Column({ name: 'order_index', type: 'int' })
   orderIndex: number;
+
+  @OneToMany(() => Lesson, (lesson) => lesson.section)
+  lessons: Relation<Lesson>[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
