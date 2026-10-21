@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor.js';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor.js';
 import { envValidationSchema } from './config/env.validation.js';
+import { EnrollmentsModule } from './enrollments/enrollments.module.js';
 import { HealthModule } from './health/health.module.js';
 import { UsersModule } from './users/users.module.js';
 import { CoursesModule } from './courses/courses.module.js';
@@ -51,6 +52,7 @@ import { ContentsModule } from './contents/contents.module.js';
     CategoriesModule,
     LessonsModule,
     ContentsModule,
+    EnrollmentsModule,
   ],
 
   controllers: [AppController],
