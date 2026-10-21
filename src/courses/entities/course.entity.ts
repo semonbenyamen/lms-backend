@@ -5,12 +5,14 @@ import {
   Index,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import type { Relation } from 'typeorm';
 
 import { User } from '../../users/entities/user.entity.js';
+import { Section } from '../../sections/entities/section.entity.js';
 
 @Entity('courses')
 export class Course {
@@ -51,6 +53,9 @@ export class Course {
   @ManyToOne(() => User, (user) => user.courses, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'instructor_id' })
   instructor: Relation<User>;
+
+  @OneToMany(() => Section, (section) => section.course)
+  sections: Relation<Section>[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

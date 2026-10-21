@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { SectionResponseDto } from '../../sections/dto/section-response.dto.js';
 
 export class CourseResponseDto {
   @ApiProperty({
@@ -72,6 +73,12 @@ export class CourseResponseDto {
     description: 'Instructor ID who owns the course',
   })
   instructorId: string;
+
+  @ApiPropertyOptional({
+    type: () => [SectionResponseDto],
+    description: 'Course sections',
+  })
+  sections?: SectionResponseDto[];
 
   @ApiProperty({
     example: '2026-10-11T00:00:00.000Z',
