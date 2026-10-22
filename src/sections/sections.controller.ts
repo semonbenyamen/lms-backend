@@ -132,7 +132,7 @@ export class SectionsController {
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get section details by ID with lessons' })
+  @ApiOperation({ summary: 'Get section details by ID' })
   @ApiSuccessResponse(SectionResponseDto, HttpStatus.OK)
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
