@@ -1,12 +1,12 @@
 import {
   Column,
   CreateDateColumn,
+  DeleteDateColumn,
   Entity,
   Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
-  Unique,
   UpdateDateColumn,
 } from 'typeorm';
 import type { Relation } from 'typeorm';
@@ -14,7 +14,11 @@ import type { Relation } from 'typeorm';
 import { Course } from '../../courses/entities/course.entity.js';
 
 @Entity('sections')
-@Unique('UQ_sections_course_order', ['courseId', 'orderIndex'])
+// Unique among non-deleted sections, so a deleted section frees its order.
+@Index('UQ_sections_course_order', ['courseId', 'orderIndex'], {
+  unique: true,
+  where: '"deleted_at" IS NULL',
+})
 export class Section {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -33,11 +37,14 @@ export class Section {
   @Column({ name: 'order_index', type: 'int' })
   orderIndex: number;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
+
+  @DeleteDateColumn({ name: 'deleted_at', type: 'timestamptz', nullable: true })
+  deletedAt: Date | null;
 }
 
 export { Section as CourseSection };

@@ -148,7 +148,7 @@ export class SectionsService {
     const section = await this.findSectionWithCourse(id);
     this.assertOwnershipOrAdmin(section.course.instructorId, user, 'delete');
 
-    await this.sectionsRepository.remove(section);
+    await this.sectionsRepository.softRemove(section);
   }
 
   // order_index is unique per course, so a clash is a 409, not a 500.
