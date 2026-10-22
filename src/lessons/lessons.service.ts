@@ -136,15 +136,6 @@ export class LessonsService {
     return this.lessonsRepository.find(findOptions);
   }
 
-  // Alias for backward compatibility if needed
-  async findByModule(
-    sectionId: string,
-    user?: JwtPayload,
-    paginationQuery?: PaginationQueryDto,
-  ): Promise<Lesson[]> {
-    return this.findBySection(sectionId, user, paginationQuery);
-  }
-
   async update(
     id: string,
     dto: UpdateLessonDto,

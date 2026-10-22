@@ -36,7 +36,7 @@ export class LessonsController {
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get lesson details by ID with content items' })
+  @ApiOperation({ summary: 'Get lesson details by ID' })
   @ApiSuccessResponse(LessonResponseDto, HttpStatus.OK)
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
