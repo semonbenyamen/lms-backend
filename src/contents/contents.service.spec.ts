@@ -7,7 +7,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { QueryFailedError } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { CloudinaryService } from '../common/cloudinary/cloudinary.service.js';
+import { ContentFile } from './entities/content-file.entity.js';
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { ContentType } from '../common/enums/content-type.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
@@ -32,7 +33,17 @@ describe('ContentsService', () => {
   const mockLessonsService = {
     findLessonWithCourse: vi.fn(),
   };
+const mockContentFilesRepo = {
+  create: vi.fn(),
+  save: vi.fn(),
+  findOne: vi.fn(),
+  remove: vi.fn(),
+};
 
+const mockCloudinaryService = {
+  uploadFile: vi.fn(),
+  deleteFile: vi.fn(),
+};
   const instructorUser: JwtPayload = {
     sub: 'instructor-1',
     email: 'inst@example.com',
@@ -71,6 +82,14 @@ describe('ContentsService', () => {
           provide: LessonsService,
           useValue: mockLessonsService,
         },
+        {
+  provide: getRepositoryToken(ContentFile),
+  useValue: mockContentFilesRepo,
+},
+{
+  provide: CloudinaryService,
+  useValue: mockCloudinaryService,
+},
       ],
     }).compile();
 

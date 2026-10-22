@@ -24,6 +24,7 @@ describe('CoursesService', () => {
 
   const mockCoursesRepo = {
     create: vi.fn(),
+    findOneOrFail: vi.fn(),
     save: vi.fn(),
     merge: vi.fn((course: object, changes: object) =>
       Object.assign(course, changes),

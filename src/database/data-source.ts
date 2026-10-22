@@ -8,6 +8,7 @@ import { Section } from '../sections/entities/section.entity.js';
 import { Category } from '../categories/entities/category.entity.js';
 import { Lesson } from '../lessons/entities/lesson.entity.js';
 import { ContentItem } from '../contents/entities/content-item.entity.js';
+import { ContentFile } from '../contents/entities/content-file.entity.js';
 
 export const AppDataSource = new DataSource({
   type: 'postgres',
@@ -21,6 +22,7 @@ export const AppDataSource = new DataSource({
     Category, Section,
     Lesson,
     ContentItem,
+    ContentFile
   ],
 
   migrations: ['src/database/migrations/*.ts'],

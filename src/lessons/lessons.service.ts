@@ -68,8 +68,12 @@ export class LessonsService {
     // Get all active lessons ordered by their position.
     const lessons = await this.lessonsRepository.find({
       where: { sectionId },
+      relations: { contentItems: true },
       order: {
         orderIndex: 'ASC',
+        contentItems: {
+          orderIndex: 'ASC',
+        },
       },
     });
 
@@ -94,6 +98,8 @@ export class LessonsService {
       await manager.softRemove(Lesson, lesson);
     });
   }
+
+ 
 
   // --- Helper Methods ---
 

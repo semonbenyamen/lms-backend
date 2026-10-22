@@ -10,6 +10,9 @@ import {
   Patch,
   Req,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+ 
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 

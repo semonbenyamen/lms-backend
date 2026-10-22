@@ -1,3 +1,4 @@
+
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -10,6 +11,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 
 import { ContentType } from '../../common/enums/content-type.enum.js';
@@ -23,14 +25,14 @@ export const MAX_VIDEO_DURATION_SECONDS = 12 * 60 * 60;
 // The lesson comes from the route, so it is not part of the body.
 export class CreateContentItemDto {
   @ApiProperty({
-    example: 'Video Lecture: Setting up NestJS',
-    description: 'Title of the content item',
-    minLength: 1,
+    example: 'Introduction to NestJS',
     maxLength: 255,
   })
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsString()
-  @IsNotEmpty({ message: 'Title must not be empty' })
+  @IsNotEmpty()
   @MaxLength(255)
   title: string;
 
@@ -43,14 +45,18 @@ export class CreateContentItemDto {
   @IsEnum(ContentType, {
     message: 'contentType must be one of: text, video, image',
   })
+  @IsEnum(ContentType)
   contentType: ContentType;
 
   @ApiPropertyOptional({
     example: '# Chapter Overview\nThis lecture covers controller decorators...',
     description: 'Text content, or the transcript of a video',
   })
-  @IsOptional()
+  @ValidateIf((o: CreateContentItemDto) =>
+    o.contentType === ContentType.TEXT,
+  )
   @IsString()
+  @IsNotEmpty()
   bodyText?: string;
 
   @ApiPropertyOptional({
@@ -62,6 +68,15 @@ export class CreateContentItemDto {
   @IsUrl(URL_OPTIONS)
   @MaxLength(2048)
   videoUrl?: string;
+  @ApiPropertyOptional({
+    example: 'https://cdn.example.com/guide.pdf',
+    description: 'External resource URL; optional when uploading a file',
+    maxLength: 2048,
+  })
+  @IsOptional()
+  @IsUrl({ require_protocol: true })
+  @MaxLength(2048)
+  resourceUrl?: string;
 
   @ApiPropertyOptional({
     example: 'https://cdn.example.com/images/diagram.png',
@@ -88,9 +103,9 @@ export class CreateContentItemDto {
   durationSeconds?: number;
 
   @ApiProperty({
-    example: 1,
-    description: 'Order index of the content item within the lesson',
+    example: 0,
     minimum: 0,
+    description: 'Position of this content within the lesson',
   })
   @Type(() => Number)
   @IsInt()
