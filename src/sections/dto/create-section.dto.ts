@@ -1,16 +1,8 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsString, MaxLength, Min } from 'class-validator';
 
 export class CreateSectionDto {
-  @ApiPropertyOptional({
-    example: '550e8400-e29b-41d4-a716-446655440000',
-    description: 'Course ID (optional if provided as route param)',
-  })
-  @IsOptional()
-  @IsUUID()
-  courseId?: string;
-
   @ApiProperty({
     example: 'Chapter 1: Getting Started',
     description: 'Title of the course section',

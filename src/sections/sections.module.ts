@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthModule } from '../auth/auth.module.js';
 import { Course } from '../courses/entities/course.entity.js';
+import { CourseSectionsController } from './course-sections.controller.js';
 import { Section } from './entities/section.entity.js';
 import { SectionsController } from './sections.controller.js';
 import { SectionsService } from './sections.service.js';
@@ -12,7 +13,7 @@ import { SectionsService } from './sections.service.js';
     TypeOrmModule.forFeature([Section, Course]),
     AuthModule,
   ],
-  controllers: [SectionsController],
+  controllers: [CourseSectionsController, SectionsController],
   providers: [SectionsService],
   exports: [SectionsService],
 })
