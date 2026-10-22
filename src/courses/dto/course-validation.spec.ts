@@ -1,0 +1,68 @@
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import { describe, expect, it } from 'vitest';
+
+import { CreateCourseDto } from './create-course.dto.js';
+import { UpdateCourseDto } from './update-course.dto.js';
+
+describe('Course DTO Validation', () => {
+  const validationPipe = new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+  });
+
+  const validCourse = {
+    title: 'NestJS Backend Architecture',
+    description: 'Learn NestJS backend development',
+    category: 'Backend Development',
+    topics: ['NestJS', 'TypeScript'],
+  };
+
+  it('should accept valid course creation data', async () => {
+    const result = await validationPipe.transform(validCourse, {
+      type: 'body',
+      metatype: CreateCourseDto,
+    });
+
+    expect(result).toBeInstanceOf(CreateCourseDto);
+    expect(result).toMatchObject(validCourse);
+  });
+
+  it('should reject isPublished during course creation', async () => {
+    // Publishing must not be controlled through the create DTO.
+    await expect(
+      validationPipe.transform(
+        { ...validCourse, isPublished: true },
+        { type: 'body', metatype: CreateCourseDto },
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('should reject isPublished during course updates', async () => {
+    // Publishing requires a separate workflow with content checks.
+    await expect(
+      validationPipe.transform(
+        { isPublished: true },
+        { type: 'body', metatype: UpdateCourseDto },
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('should reject negative estimated duration', async () => {
+    await expect(
+      validationPipe.transform(
+        { ...validCourse, estimatedDuration: -10 },
+        { type: 'body', metatype: CreateCourseDto },
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('should reject an empty course title', async () => {
+    await expect(
+      validationPipe.transform(
+        { ...validCourse, title: '   ' },
+        { type: 'body', metatype: CreateCourseDto },
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+});

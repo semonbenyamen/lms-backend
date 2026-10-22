@@ -29,7 +29,8 @@ import { UserRole } from '../common/enums/user-role.enum.js';
 import { CoursesService } from './courses.service.js';
 import { CourseResponseDto } from './dto/course-response.dto.js';
 import { CreateCourseDto } from './dto/create-course.dto.js';
-import { PaginationQueryDto } from './dto/pagination-query.dto.js';
+// Reuse the shared pagination DTO across modules.
+import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
 import { UpdateCourseDto } from './dto/update-course.dto.js';
 
 @ApiTags('Courses')
@@ -88,10 +89,10 @@ export class CoursesController {
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  // Document only the course details currently returned by the service.
   @ApiOperation({
-    summary:
-      'Get course details by ID with full content structure (Sections, Lessons, ContentItems)',
-  })
+  summary: 'Get course details by ID',
+})
   @ApiSuccessResponse(CourseResponseDto, HttpStatus.OK)
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
@@ -147,11 +148,14 @@ export class CoursesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Delete a course by ID (Course Owner or Admin)' })
+  // Course deletion preserves the record using soft delete.
+  @ApiOperation({
+  summary: 'Soft delete a course by ID (Course Owner or Admin)',
+})
   @ApiResponse({
-    status: HttpStatus.NO_CONTENT,
-    description: 'Course deleted successfully',
-  })
+  status: HttpStatus.NO_CONTENT,
+  description: 'Course soft deleted successfully',
+})
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
     description: 'Invalid UUID format',

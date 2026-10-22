@@ -20,6 +20,7 @@ describe('CoursesService', () => {
     save: vi.fn(),
     findOne: vi.fn(),
     remove: vi.fn(),
+    softRemove: vi.fn(),
     createQueryBuilder: vi.fn(),
   };
 
@@ -308,12 +309,15 @@ describe('CoursesService', () => {
       instructorId: instructorUser.sub,
     };
 
-    it('should allow the owner instructor to delete the course', async () => {
+    it('should allow the owner instructor to soft delete the course', async () => {
       mockCoursesRepo.findOne.mockResolvedValue({ ...course });
-      mockCoursesRepo.remove.mockResolvedValue(undefined);
+      mockCoursesRepo.softRemove.mockResolvedValue(undefined);
 
       await service.remove('course-1', instructorUser);
-      expect(mockCoursesRepo.remove).toHaveBeenCalled();
+
+      // Verify that deletion preserves the database record.
+      expect(mockCoursesRepo.softRemove).toHaveBeenCalledWith(course);
+      expect(mockCoursesRepo.remove).not.toHaveBeenCalled();
     });
 
     it('should forbid another instructor from deleting the course', async () => {
@@ -322,14 +326,21 @@ describe('CoursesService', () => {
       await expect(
         service.remove('course-1', otherInstructorUser),
       ).rejects.toThrow(ForbiddenException);
+
+      // Unauthorized users must not trigger any deletion.
+      expect(mockCoursesRepo.softRemove).not.toHaveBeenCalled();
+      expect(mockCoursesRepo.remove).not.toHaveBeenCalled();
     });
 
-    it('should allow an admin to delete any course', async () => {
+    it('should allow an admin to soft delete any course', async () => {
       mockCoursesRepo.findOne.mockResolvedValue({ ...course });
-      mockCoursesRepo.remove.mockResolvedValue(undefined);
+      mockCoursesRepo.softRemove.mockResolvedValue(undefined);
 
       await service.remove('course-1', adminUser);
-      expect(mockCoursesRepo.remove).toHaveBeenCalled();
+
+      // Admin deletion must also use soft delete.
+      expect(mockCoursesRepo.softRemove).toHaveBeenCalledWith(course);
+      expect(mockCoursesRepo.remove).not.toHaveBeenCalled();
     });
   });
 });
