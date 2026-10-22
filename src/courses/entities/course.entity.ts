@@ -1,6 +1,8 @@
+
 import {
   Column,
   CreateDateColumn,
+  DeleteDateColumn,
   Entity,
   Index,
   JoinColumn,
@@ -52,9 +54,18 @@ export class Course {
   @JoinColumn({ name: 'instructor_id' })
   instructor: Relation<User>;
 
-  @CreateDateColumn({ name: 'created_at' })
+  // Store timestamps with timezone information for consistent date handling.
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
+
+  // Soft delete preserves course records and excludes them from normal queries.
+  @DeleteDateColumn({
+    name: 'deleted_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  deletedAt: Date | null;
 }

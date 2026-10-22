@@ -3,13 +3,12 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
   IsArray,
-  IsBoolean,
   IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   MaxLength,
-  
+  Min,
 } from 'class-validator';
 
 export class CreateCourseDto {
@@ -23,7 +22,6 @@ export class CreateCourseDto {
   @IsString()
   @IsNotEmpty({ message: 'Title must not be empty or whitespace-only' })
   @MaxLength(255)
-  
   title: string;
 
   @ApiProperty({
@@ -99,14 +97,7 @@ export class CreateCourseDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
+  // Prevent negative course durations.
+  @Min(0)
   estimatedDuration?: number;
-
-  @ApiPropertyOptional({
-    example: false,
-    description: 'Whether the course is published for student viewing',
-    default: false,
-  })
-  @IsOptional()
-  @IsBoolean()
-  isPublished?: boolean;
 }
