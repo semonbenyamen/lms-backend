@@ -15,7 +15,7 @@ import {
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 
-import { AuthService } from './auth.service.js';
+import { StudentAuthService } from './student-auth.service.js';
 import { ChangePasswordDto } from './dto/change-password.dto.js';
 import { ForgotPasswordDto } from './dto/forgot-password.dto.js';
 import { LoginDto } from './dto/login.dto.js';
@@ -36,7 +36,7 @@ import { AUTH_THROTTLE } from './constants/auth-throttle.constants.js';
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly studentAuthService: StudentAuthService,) {}
 
   // Limit account creation attempts to reduce automated abuse.
   @Throttle(AUTH_THROTTLE.REGISTER)
@@ -44,7 +44,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Register a new user' })
   @ApiSuccessResponse(UserResponseDto, HttpStatus.CREATED)
   register(@Body() registerDto: RegisterDto) {
-    return this.authService.register(registerDto);
+    return this.studentAuthService.registerStudent(registerDto);
   }
 
   // Limit OTP verification attempts to reduce code guessing.
@@ -53,7 +53,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Verify user email using OTP' })
   @ApiSuccessResponse(MessageResponseDto, HttpStatus.CREATED)
   verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
-    return this.authService.verifyEmail(verifyEmailDto);
+    return this.studentAuthService.verifyEmail(verifyEmailDto);
   }
 
   // Limit repeated verification emails to prevent OTP spam.
@@ -64,7 +64,7 @@ export class AuthController {
   resendVerification(
     @Body() resendVerificationDto: ResendVerificationDto,
   ) {
-    return this.authService.resendVerificationCode(
+    return this.studentAuthService.resendVerificationCode(
       resendVerificationDto,
     );
   }
@@ -76,7 +76,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Login with email and password' })
   @ApiSuccessResponse(LoginResponseDto, HttpStatus.OK)
   login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+    return this.studentAuthService.login(loginDto);
   }
 
   @Get('me')
@@ -85,7 +85,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Get the authenticated user profile' })
   @ApiSuccessResponse(UserResponseDto, HttpStatus.OK)
   getProfile(@Req() request: AuthenticatedRequest) {
-    return this.authService.getProfile(request.user.sub);
+    return this.studentAuthService.getProfile(request.user.sub);
   }
 
   // Limit password reset requests to prevent email abuse.
@@ -95,7 +95,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Request a password reset OTP' })
   @ApiSuccessResponse(MessageResponseDto, HttpStatus.OK)
   forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(forgotPasswordDto);
+    return this.studentAuthService.forgotPassword(forgotPasswordDto);
   }
 
   // Limit password reset attempts to reduce OTP guessing.
@@ -105,7 +105,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Reset password using OTP' })
   @ApiSuccessResponse(MessageResponseDto, HttpStatus.OK)
   resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
-    return this.authService.resetPassword(resetPasswordDto);
+    return this.studentAuthService.resetPassword(resetPasswordDto);
   }
 
   @Post('refresh')
@@ -113,7 +113,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Refresh access and refresh tokens' })
   @ApiSuccessResponse(TokenResponseDto, HttpStatus.OK)
   refresh(@Body() refreshTokenDto: RefreshTokenDto) {
-    return this.authService.refresh(refreshTokenDto);
+    return this.studentAuthService.refreshSessionTokens(refreshTokenDto);
   }
 
   @Post('logout')
@@ -121,7 +121,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Logout and revoke refresh token' })
   @ApiSuccessResponse(MessageResponseDto, HttpStatus.OK)
   logout(@Body() refreshTokenDto: RefreshTokenDto) {
-    return this.authService.logout(refreshTokenDto);
+    return this.studentAuthService.logout(refreshTokenDto);
   }
 
   @Post('change-password')
@@ -134,7 +134,7 @@ export class AuthController {
     @Req() request: AuthenticatedRequest,
     @Body() changePasswordDto: ChangePasswordDto,
   ) {
-    return this.authService.changePassword(
+    return this.studentAuthService.changeAuthenticatedUserPassword(
       request.user.sub,
       changePasswordDto,
     );
