@@ -9,6 +9,7 @@ import { QueryFailedError } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
+import { CourseDifficulty } from '../common/enums/course-difficulty.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { Section } from '../sections/entities/section.entity.js';
 import { Lesson } from './entities/lesson.entity.js';
@@ -83,7 +84,7 @@ describe('LessonsService', () => {
       title: 'Introduction to Services',
       orderIndex: 1,
       topic: 'Dependency Injection',
-      difficulty: 'beginner',
+      difficulty: CourseDifficulty.BEGINNER,
     };
 
     it('should allow course owner instructor to create a lesson', async () => {

@@ -11,6 +11,7 @@ import {
 } from 'typeorm';
 import type { Relation } from 'typeorm';
 
+import { CourseDifficulty } from '../../common/enums/course-difficulty.enum.js';
 import { Section } from '../../sections/entities/section.entity.js';
 
 @Entity('lessons')
@@ -42,8 +43,8 @@ export class Lesson {
   @Column({ type: 'varchar', length: 255, nullable: true })
   topic: string | null;
 
-  @Column({ type: 'varchar', length: 50, nullable: true })
-  difficulty: string | null;
+  @Column({ type: 'enum', enum: CourseDifficulty, nullable: true })
+  difficulty: CourseDifficulty | null;
 
   @Column('text', { array: true, nullable: true })
   prerequisites: string[] | null;
