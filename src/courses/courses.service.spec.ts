@@ -8,6 +8,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
+import { CourseDifficulty } from '../common/enums/course-difficulty.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { CoursesService } from './courses.service.js';
 import { Course } from './entities/course.entity.js';
@@ -70,7 +71,7 @@ describe('CoursesService', () => {
       description: 'Comprehensive course on NestJS architecture',
       category: 'Software Engineering',
       topics: ['NestJS', 'TypeScript', 'Clean Architecture'],
-      difficulty: 'intermediate',
+      difficulty: CourseDifficulty.INTERMEDIATE,
       language: 'en',
       prerequisites: ['JavaScript Basics'],
       estimatedDuration: 180,

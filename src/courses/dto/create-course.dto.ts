@@ -3,6 +3,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
   IsArray,
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -10,6 +11,8 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+
+import { CourseDifficulty } from '../../common/enums/course-difficulty.enum.js';
 
 export class CreateCourseDto {
   @ApiProperty({
@@ -58,15 +61,13 @@ export class CreateCourseDto {
   topics: string[];
 
   @ApiPropertyOptional({
-    example: 'intermediate',
-    description:
-      'Difficulty level of the course (e.g. beginner, intermediate, advanced)',
-    maxLength: 50,
+    enum: CourseDifficulty,
+    example: CourseDifficulty.INTERMEDIATE,
+    description: 'Difficulty level of the course',
   })
   @IsOptional()
-  @IsString()
-  @MaxLength(50)
-  difficulty?: string;
+  @IsEnum(CourseDifficulty)
+  difficulty?: CourseDifficulty;
 
   @ApiPropertyOptional({
     example: 'en',
