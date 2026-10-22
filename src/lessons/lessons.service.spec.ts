@@ -1,6 +1,11 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { QueryFailedError } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
@@ -122,6 +127,22 @@ describe('LessonsService', () => {
       await expect(
         service.create('nonexistent-section', createDto, instructorUser),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ConflictException if the orderIndex is taken', async () => {
+      mockSectionsRepo.findOne.mockResolvedValue(section);
+      mockLessonsRepo.create.mockReturnValue({ sectionId: 'section-1', ...createDto });
+      mockLessonsRepo.save.mockRejectedValue(
+        new QueryFailedError(
+          'INSERT',
+          [],
+          Object.assign(new Error('duplicate key'), { code: '23505' }),
+        ),
+      );
+
+      await expect(
+        service.create('section-1', createDto, instructorUser),
+      ).rejects.toThrow(ConflictException);
     });
   });
 
