@@ -1,6 +1,5 @@
 import {
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -8,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
+import { assertOwnershipOrAdmin } from '../common/authorization/authorization.util.js';
 import { isUniqueViolation } from '../common/database/is-unique-violation.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
@@ -40,9 +40,10 @@ export class LessonsService {
       throw new NotFoundException(`Section with ID ${sectionId} not found`);
     }
 
-    this.assertOwnershipOrAdmin(
+    assertOwnershipOrAdmin(
+      user.role,
+      user.sub,
       section.course.instructorId,
-      user,
       'create lessons in',
     );
 
@@ -150,10 +151,11 @@ export class LessonsService {
     user: JwtPayload,
   ): Promise<Lesson> {
     const lesson = await this.findLessonWithCourse(id);
-    this.assertOwnershipOrAdmin(
+    assertOwnershipOrAdmin(
+      user.role,
+      user.sub,
       lesson.section.course.instructorId,
-      user,
-      'update',
+      'update lessons in',
     );
 
     if (dto.title !== undefined) {
@@ -177,10 +179,11 @@ export class LessonsService {
 
   async remove(id: string, user: JwtPayload): Promise<void> {
     const lesson = await this.findLessonWithCourse(id);
-    this.assertOwnershipOrAdmin(
+    assertOwnershipOrAdmin(
+      user.role,
+      user.sub,
       lesson.section.course.instructorId,
-      user,
-      'delete',
+      'delete lessons in',
     );
 
     await this.lessonsRepository.softRemove(lesson);
@@ -213,21 +216,5 @@ export class LessonsService {
     }
 
     return lesson;
-  }
-
-  private assertOwnershipOrAdmin(
-    instructorId: string,
-    user: JwtPayload,
-    action: string,
-  ): void {
-    const isAdmin = user.role === UserRole.ADMIN;
-    const isOwner =
-      user.role === UserRole.INSTRUCTOR && instructorId === user.sub;
-
-    if (!isAdmin && !isOwner) {
-      throw new ForbiddenException(
-        `You do not have permission to ${action} this lesson`,
-      );
-    }
   }
 }
