@@ -1,3 +1,4 @@
+
 import {
   Column,
   CreateDateColumn,
@@ -35,14 +36,57 @@ export class Enrollment {
   @Column({
     type: 'enum',
     enum: EnrollmentStatus,
-    default: EnrollmentStatus.ACTIVE,
+    default: EnrollmentStatus.NOT_STARTED,
   })
   status: EnrollmentStatus;
 
+  @Column({
+    name: 'completion_percentage',
+    type: 'numeric',
+    precision: 5,
+    scale: 2,
+    default: 0,
+  })
+  completionPercentage: number;
+
+  @Column({
+    name: 'lessons_completed',
+    type: 'int',
+    default: 0,
+  })
+  lessonsCompleted: number;
+
+  @Column({
+    name: 'last_activity_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  lastActivityAt: Date | null;
+
+  @Column({
+    name: 'completed_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  completedAt: Date | null;
+
+  @Column({
+    name: 'cancelled_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  cancelledAt: Date | null;
+
   // Track when the enrollment was created or updated.
-  @CreateDateColumn({ name: 'enrolled_at' })
+  @CreateDateColumn({
+    name: 'enrolled_at',
+    type: 'timestamptz',
+  })
   enrolledAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({
+    name: 'updated_at',
+    type: 'timestamptz',
+  })
   updatedAt: Date;
 }

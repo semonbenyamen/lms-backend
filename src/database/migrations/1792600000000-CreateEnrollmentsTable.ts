@@ -1,3 +1,4 @@
+
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class CreateEnrollmentsTable1792600000000
@@ -6,10 +7,10 @@ export class CreateEnrollmentsTable1792600000000
   name = 'CreateEnrollmentsTable1792600000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // Create the enrollment status type.
+    // Create the enrollment progress status type.
     await queryRunner.query(`
       CREATE TYPE "public"."enrollments_status_enum"
-      AS ENUM ('active', 'cancelled')
+      AS ENUM ('not_started', 'in_progress', 'completed')
     `);
 
     // Create the enrollments table.
@@ -19,9 +20,14 @@ export class CreateEnrollmentsTable1792600000000
         "student_id" uuid NOT NULL,
         "course_id" uuid NOT NULL,
         "status" "public"."enrollments_status_enum"
-          NOT NULL DEFAULT 'active',
-        "enrolled_at" TIMESTAMP NOT NULL DEFAULT now(),
-        "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
+          NOT NULL DEFAULT 'not_started',
+        "completion_percentage" numeric(5,2) NOT NULL DEFAULT 0,
+        "lessons_completed" integer NOT NULL DEFAULT 0,
+        "last_activity_at" TIMESTAMPTZ,
+        "completed_at" TIMESTAMPTZ,
+        "cancelled_at" TIMESTAMPTZ,
+        "enrolled_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
         CONSTRAINT "PK_enrollments_id" PRIMARY KEY ("id"),
         CONSTRAINT "UQ_enrollments_student_course"
           UNIQUE ("student_id", "course_id")
