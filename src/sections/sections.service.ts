@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -7,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
+import { isUniqueViolation } from '../common/database/is-unique-violation.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
 import { getPaginationParams } from '../common/pagintion/pagination.util.js';
@@ -49,7 +51,7 @@ export class SectionsService {
       orderIndex: dto.orderIndex,
     });
 
-    return this.sectionsRepository.save(section);
+    return this.saveSection(section);
   }
 
   async findById(id: string, user?: JwtPayload): Promise<Section> {
@@ -139,7 +141,7 @@ export class SectionsService {
       section.orderIndex = dto.orderIndex;
     }
 
-    return this.sectionsRepository.save(section);
+    return this.saveSection(section);
   }
 
   async remove(id: string, user: JwtPayload): Promise<void> {
@@ -147,6 +149,20 @@ export class SectionsService {
     this.assertOwnershipOrAdmin(section.course.instructorId, user, 'delete');
 
     await this.sectionsRepository.remove(section);
+  }
+
+  // order_index is unique per course, so a clash is a 409, not a 500.
+  private async saveSection(section: Section): Promise<Section> {
+    try {
+      return await this.sectionsRepository.save(section);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(
+          `Another section in this course already uses orderIndex ${section.orderIndex}`,
+        );
+      }
+      throw error;
+    }
   }
 
   private async findSectionWithCourse(id: string): Promise<Section> {
