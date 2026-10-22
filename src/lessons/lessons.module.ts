@@ -7,13 +7,14 @@ import { Section } from '../sections/entities/section.entity.js';
 import { Lesson } from './entities/lesson.entity.js';
 import { LessonsController } from './lessons.controller.js';
 import { LessonsService } from './lessons.service.js';
+import { SectionLessonsController } from './section-lessons.controller.js';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Lesson, Section, Course]),
     AuthModule,
   ],
-  controllers: [LessonsController],
+  controllers: [SectionLessonsController, LessonsController],
   providers: [LessonsService],
   exports: [LessonsService],
 })

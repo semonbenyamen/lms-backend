@@ -7,9 +7,11 @@ import type { AuthenticatedRequest } from '../auth/types/authenticated-request.t
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { LessonsController } from './lessons.controller.js';
 import { LessonsService } from './lessons.service.js';
+import { SectionLessonsController } from './section-lessons.controller.js';
 
 describe('LessonsController', () => {
   let controller: LessonsController;
+  let sectionLessonsController: SectionLessonsController;
 
   const mockLessonsService = {
     create: vi.fn(),
@@ -31,7 +33,7 @@ describe('LessonsController', () => {
     vi.clearAllMocks();
 
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [LessonsController],
+      controllers: [SectionLessonsController, LessonsController],
       providers: [
         {
           provide: LessonsService,
@@ -46,13 +48,20 @@ describe('LessonsController', () => {
       .compile();
 
     controller = module.get<LessonsController>(LessonsController);
+    sectionLessonsController = module.get<SectionLessonsController>(
+      SectionLessonsController,
+    );
   });
 
   it('should create a lesson in a section', async () => {
     const dto = { title: 'Lesson 1', orderIndex: 1 };
     mockLessonsService.create.mockResolvedValue({ id: 'l-1', ...dto });
 
-    const result = await controller.create('section-1', dto, mockReq);
+    const result = await sectionLessonsController.create(
+      'section-1',
+      dto,
+      mockReq,
+    );
 
     expect(mockLessonsService.create).toHaveBeenCalledWith(
       'section-1',
@@ -75,7 +84,10 @@ describe('LessonsController', () => {
   it('should find lessons by section ID', async () => {
     mockLessonsService.findBySection.mockResolvedValue([]);
 
-    const result = await controller.findBySection('section-1', mockReq);
+    const result = await sectionLessonsController.findBySection(
+      'section-1',
+      mockReq,
+    );
 
     expect(mockLessonsService.findBySection).toHaveBeenCalledWith(
       'section-1',

@@ -7,7 +7,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUUID,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -15,14 +14,6 @@ import {
 import { CourseDifficulty } from '../../common/enums/course-difficulty.enum.js';
 
 export class CreateLessonDto {
-  @ApiPropertyOptional({
-    example: '550e8400-e29b-41d4-a716-446655440002',
-    description: 'Section ID that this lesson belongs to',
-  })
-  @IsOptional()
-  @IsUUID()
-  sectionId?: string;
-
   @ApiProperty({
     example: 'Lesson 1: Introduction to Controllers',
     description: 'Title of the lesson',
