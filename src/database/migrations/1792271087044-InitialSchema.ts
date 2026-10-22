@@ -6,13 +6,18 @@ export class InitialSchema1792271087044 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Create only the courses table; other modules manage their own migrations.
     await queryRunner.query(`
+      CREATE TYPE "public"."courses_difficulty_enum"
+      AS ENUM ('beginner', 'intermediate', 'advanced')
+    `);
+
+    await queryRunner.query(`
       CREATE TABLE "courses" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "title" character varying(255) NOT NULL,
         "description" text NOT NULL,
         "category" character varying(100) NOT NULL,
         "topics" text array NOT NULL DEFAULT '{}',
-        "difficulty" character varying(50),
+        "difficulty" "public"."courses_difficulty_enum",
         "language" character varying(50) NOT NULL DEFAULT 'en',
         "prerequisites" text array,
         "estimated_duration" integer,
@@ -45,5 +50,6 @@ export class InitialSchema1792271087044 implements MigrationInterface {
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Roll back only the courses table created by this migration.
     await queryRunner.query(`DROP TABLE "courses"`);
+    await queryRunner.query(`DROP TYPE "public"."courses_difficulty_enum"`);
   }
 }
