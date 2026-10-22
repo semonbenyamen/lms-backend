@@ -183,7 +183,7 @@ export class LessonsService {
       'delete',
     );
 
-    await this.lessonsRepository.remove(lesson);
+    await this.lessonsRepository.softRemove(lesson);
   }
 
   // --- Helper Methods ---

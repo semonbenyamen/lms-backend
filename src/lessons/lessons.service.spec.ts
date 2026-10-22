@@ -22,7 +22,7 @@ describe('LessonsService', () => {
     save: vi.fn(),
     findOne: vi.fn(),
     find: vi.fn(),
-    remove: vi.fn(),
+    softRemove: vi.fn(),
   };
 
   const mockSectionsRepo = {
@@ -262,10 +262,10 @@ describe('LessonsService', () => {
 
     it('should allow owner to delete lesson', async () => {
       mockLessonsRepo.findOne.mockResolvedValue(lesson);
-      mockLessonsRepo.remove.mockResolvedValue(undefined);
+      mockLessonsRepo.softRemove.mockResolvedValue(undefined);
 
       await service.remove('lesson-1', instructorUser);
-      expect(mockLessonsRepo.remove).toHaveBeenCalledWith(lesson);
+      expect(mockLessonsRepo.softRemove).toHaveBeenCalledWith(lesson);
     });
 
     it('should forbid other instructor from deleting lesson', async () => {
