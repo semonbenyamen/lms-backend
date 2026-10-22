@@ -3,14 +3,16 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
   IsArray,
-  IsBoolean,
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   MaxLength,
-  
+  Min,
 } from 'class-validator';
+
+import { CourseDifficulty } from '../../common/enums/course-difficulty.enum.js';
 
 export class CreateCourseDto {
   @ApiProperty({
@@ -23,7 +25,6 @@ export class CreateCourseDto {
   @IsString()
   @IsNotEmpty({ message: 'Title must not be empty or whitespace-only' })
   @MaxLength(255)
-  
   title: string;
 
   @ApiProperty({
@@ -60,15 +61,13 @@ export class CreateCourseDto {
   topics: string[];
 
   @ApiPropertyOptional({
-    example: 'intermediate',
-    description:
-      'Difficulty level of the course (e.g. beginner, intermediate, advanced)',
-    maxLength: 50,
+    enum: CourseDifficulty,
+    example: CourseDifficulty.INTERMEDIATE,
+    description: 'Difficulty level of the course',
   })
   @IsOptional()
-  @IsString()
-  @MaxLength(50)
-  difficulty?: string;
+  @IsEnum(CourseDifficulty)
+  difficulty?: CourseDifficulty;
 
   @ApiPropertyOptional({
     example: 'en',
@@ -99,14 +98,7 @@ export class CreateCourseDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
+  // Prevent negative course durations.
+  @Min(0)
   estimatedDuration?: number;
-
-  @ApiPropertyOptional({
-    example: false,
-    description: 'Whether the course is published for student viewing',
-    default: false,
-  })
-  @IsOptional()
-  @IsBoolean()
-  isPublished?: boolean;
 }

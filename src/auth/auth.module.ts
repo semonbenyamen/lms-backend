@@ -33,5 +33,6 @@ import { StudentAuthService } from './student-auth.service.js';
   ],
   controllers: [AuthController],
   providers: [StudentAuthService, AuthUserService, JwtAuthGuard, RolesGuard],
+  exports: [JwtModule, JwtAuthGuard, RolesGuard],
 })
 export class AuthModule {}

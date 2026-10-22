@@ -1,6 +1,11 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { QueryFailedError } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
@@ -17,7 +22,7 @@ describe('SectionsService', () => {
     save: vi.fn(),
     findOne: vi.fn(),
     find: vi.fn(),
-    remove: vi.fn(),
+    softRemove: vi.fn(),
   };
 
   const mockCoursesRepo = {
@@ -107,6 +112,22 @@ describe('SectionsService', () => {
         NotFoundException,
       );
     });
+
+    it('should throw ConflictException if the orderIndex is taken', async () => {
+      mockCoursesRepo.findOne.mockResolvedValue(course);
+      mockSectionsRepo.create.mockReturnValue({ courseId: 'c-1', ...dto });
+      mockSectionsRepo.save.mockRejectedValue(
+        new QueryFailedError(
+          'INSERT',
+          [],
+          Object.assign(new Error('duplicate key'), { code: '23505' }),
+        ),
+      );
+
+      await expect(service.create('c-1', dto, instructorUser)).rejects.toThrow(
+        ConflictException,
+      );
+    });
   });
 
   describe('findById', () => {
@@ -179,10 +200,10 @@ describe('SectionsService', () => {
 
     it('should allow owner to remove section', async () => {
       mockSectionsRepo.findOne.mockResolvedValue(section);
-      mockSectionsRepo.remove.mockResolvedValue(undefined);
+      mockSectionsRepo.softRemove.mockResolvedValue(undefined);
 
       await service.remove('s-1', instructorUser);
-      expect(mockSectionsRepo.remove).toHaveBeenCalledWith(section);
+      expect(mockSectionsRepo.softRemove).toHaveBeenCalledWith(section);
     });
   });
 });

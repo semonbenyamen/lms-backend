@@ -5,11 +5,13 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import type { AuthenticatedRequest } from '../auth/types/authenticated-request.type.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
+import { CourseSectionsController } from './course-sections.controller.js';
 import { SectionsController } from './sections.controller.js';
 import { SectionsService } from './sections.service.js';
 
 describe('SectionsController', () => {
   let controller: SectionsController;
+  let courseSectionsController: CourseSectionsController;
 
   const mockSectionsService = {
     create: vi.fn(),
@@ -31,7 +33,7 @@ describe('SectionsController', () => {
     vi.clearAllMocks();
 
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [SectionsController],
+      controllers: [CourseSectionsController, SectionsController],
       providers: [
         {
           provide: SectionsService,
@@ -46,13 +48,16 @@ describe('SectionsController', () => {
       .compile();
 
     controller = module.get<SectionsController>(SectionsController);
+    courseSectionsController = module.get<CourseSectionsController>(
+      CourseSectionsController,
+    );
   });
 
   it('should create section', async () => {
     const dto = { title: 'Chapter 1', orderIndex: 1 };
     mockSectionsService.create.mockResolvedValue({ id: 's-1', ...dto });
 
-    const result = await controller.create('c-1', dto, mockReq);
+    const result = await courseSectionsController.create('c-1', dto, mockReq);
     expect(result).toHaveProperty('id', 's-1');
   });
 
