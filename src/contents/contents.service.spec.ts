@@ -21,6 +21,11 @@ vi.mock('../common/upload/validate-content-file.js', () => ({
   validateContentFile: vi.fn(),
 }));
 
+// What TypeORM throws when Postgres rejects a duplicate (code 23505).
+const uniqueViolation = new QueryFailedError('INSERT', [], {
+  code: '23505',
+} as unknown as Error);
+
 describe('ContentsService', () => {
   let service: ContentsService;
 
@@ -349,6 +354,15 @@ const mockCloudinaryService = {
         NotFoundException,
       );
       expect(mockContentItemsRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('should return 409 when moving to a used orderIndex', async () => {
+      mockContentItemsRepo.findOne.mockResolvedValue({ ...content });
+      mockContentItemsRepo.save.mockRejectedValue(uniqueViolation);
+
+      await expect(
+        service.update('ci-1', { orderIndex: 2 }, instructorUser),
+      ).rejects.toThrow(ConflictException);
     });
   });
 
