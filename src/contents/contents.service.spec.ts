@@ -16,6 +16,11 @@ import { LessonsService } from '../lessons/lessons.service.js';
 import { ContentsService } from './contents.service.js';
 import { ContentItem } from './entities/content-item.entity.js';
 
+// File content checks need a real file; the upload flow is what's tested here.
+vi.mock('../common/upload/validate-content-file.js', () => ({
+  validateContentFile: vi.fn(),
+}));
+
 describe('ContentsService', () => {
   let service: ContentsService;
 
