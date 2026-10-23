@@ -173,6 +173,12 @@ describe('LessonsService', () => {
       const result = await service.getLesson('lesson-1', studentUser);
 
       expect(result).toEqual(expectedPublishedLesson);
+      // The details load the content items in their order.
+      expect(mockLessonsRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 'lesson-1' },
+        relations: { section: { course: true }, contentItems: true },
+        order: { contentItems: { orderIndex: 'ASC' } },
+      });
     });
 
     it('should throw NotFoundException for students when course is unpublished', async () => {

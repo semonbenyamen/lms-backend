@@ -39,9 +39,14 @@ export class LessonsService {
     lessonId: string,
     user: Pick<JwtPayload, 'sub' | 'role'>,
   ): Promise<LessonResponseDto> {
-    const lesson = await this.findLessonWithCourse(lessonId);
+    // Only the lesson details load its content items.
+    const lesson = await this.lessonsRepository.findOne({
+      where: { id: lessonId },
+      relations: { section: { course: true }, contentItems: true },
+      order: { contentItems: { orderIndex: 'ASC' } },
+    });
 
-    if (!canReadCourse(lesson.section.course, user)) {
+    if (!lesson || !canReadCourse(lesson.section.course, user)) {
       throw new NotFoundException(`Lesson with ID ${lessonId} not found`);
     }
 
