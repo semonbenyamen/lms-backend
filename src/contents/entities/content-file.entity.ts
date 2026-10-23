@@ -15,7 +15,8 @@ export class ContentFile {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'content_item_id', type: 'uuid', unique: true })
+  // Unique through the one-to-one join column; no separate unique needed.
+  @Column({ name: 'content_item_id', type: 'uuid' })
   contentItemId: string;
 
   @OneToOne(() => ContentItem, (contentItem) => contentItem.file, {
