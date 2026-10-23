@@ -52,8 +52,9 @@ export class CreateContentItemDto {
     example: '# Chapter Overview\nThis lecture covers controller decorators...',
     description: 'Text content, or the transcript of a video',
   })
-  @ValidateIf((o: CreateContentItemDto) =>
-    o.contentType === ContentType.TEXT,
+  @ValidateIf(
+    (o: CreateContentItemDto) =>
+      o.contentType === ContentType.TEXT || o.bodyText !== undefined,
   )
   @IsString()
   @IsNotEmpty()
@@ -69,14 +70,14 @@ export class CreateContentItemDto {
   @MaxLength(2048)
   videoUrl?: string;
   @ApiPropertyOptional({
-    example: 'https://cdn.example.com/guide.pdf',
-    description: 'External resource URL; optional when uploading a file',
+    example: 'https://cdn.example.com/diagram.png',
+    description: 'External image URL; optional when uploading a file',
     maxLength: 2048,
   })
   @IsOptional()
   @IsUrl({ require_protocol: true })
   @MaxLength(2048)
-  resourceUrl?: string;
+  imageUrl?: string;
 
   @ApiPropertyOptional({
     example: 'https://cdn.example.com/images/diagram.png',

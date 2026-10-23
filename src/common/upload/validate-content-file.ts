@@ -5,7 +5,9 @@ import { fileTypeFromBuffer } from 'file-type';
 const ALLOWED_MIME_TYPES = new Set([
   'video/mp4',
   'video/webm',
-  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
 ]);
 
 export async function validateContentFile(

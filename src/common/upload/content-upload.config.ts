@@ -9,7 +9,10 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 const ALLOWED_FILES: Record<string, string> = {
   '.mp4': 'video/mp4',
   '.webm': 'video/webm',
-  '.pdf': 'application/pdf',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
 };
 
 export const contentUploadOptions: MulterOptions = {
@@ -33,7 +36,7 @@ export const contentUploadOptions: MulterOptions = {
     if (!expectedMimeType || file.mimetype !== expectedMimeType) {
       return callback(
         new BadRequestException(
-          'Unsupported file type. Allowed: MP4, WebM, PDF.',
+          'Unsupported file type. Allowed: MP4, WebM, JPG, PNG, WebP.',
         ),
         false,
       );
