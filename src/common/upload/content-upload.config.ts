@@ -6,14 +6,28 @@ import { extname } from 'node:path';
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
+
+
 const ALLOWED_FILES: Record<string, string> = {
+  // Videos
   '.mp4': 'video/mp4',
   '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.ogv': 'video/ogg',
+
+  // Images
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.png': 'image/png',
   '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.avif': 'image/avif',
+  '.bmp': 'image/bmp',
+  '.tif': 'image/tiff',
+  '.tiff': 'image/tiff',
 };
+
+
 
 export const contentUploadOptions: MulterOptions = {
   // The file is temporarily held in memory before Cloudinary upload.

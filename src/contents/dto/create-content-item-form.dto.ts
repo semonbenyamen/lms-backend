@@ -9,7 +9,7 @@ export class CreateContentItemFormDto extends CreateContentItemDto {
     type: 'string',
     format: 'binary',
     description:
-      'Optional video (MP4, WebM) or image (JPG, PNG, WebP) file, up to 50 MB',
+      'Optional video (MP4, WebM) or image (JPG, PNG, WebP)or file, up to 50 MB',
   })
   file?: unknown;
 }
