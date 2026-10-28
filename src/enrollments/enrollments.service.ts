@@ -1,13 +1,9 @@
-
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 
-import { EnrollmentStatus } from '../common/enums/enrollment-status.enum.js';
 import { isUniqueViolation } from '../common/database/is-unique-violation.js';
+import { EnrollmentStatus } from '../common/enums/enrollment-status.enum.js';
 import { Course } from '../courses/entities/course.entity.js';
 import { Enrollment } from './entities/enrollment.entity.js';
 
@@ -19,67 +15,62 @@ export class EnrollmentsService {
 
     @InjectRepository(Course)
     private readonly coursesRepository: Repository<Course>,
+
+    private readonly dataSource: DataSource,
   ) {}
 
   async enroll(studentId: string, courseId: string) {
-    // Step 1: Check that the course exists and is published.
-    const course = await this.coursesRepository.findOne({
-      where: {
-        id: courseId,
-        isPublished: true,
-      },
-    });
+    try {
+      return await this.dataSource.transaction(async (manager) => {
+        // Lock the course during enrollment.
+        const course = await manager.getRepository(Course).findOne({
+          where: {
+            id: courseId,
+            isPublished: true,
+          },
+          lock: { mode: 'pessimistic_write' },
+        });
 
-    if (!course) {
-      throw new NotFoundException(
-        'Course not found or unpublished',
-      );
-    }
+        if (!course) {
+          throw new NotFoundException('Course not found or unpublished');
+        }
 
-    // Step 2: Check whether the student is already enrolled.
-    const existingEnrollment =
-      await this.enrollmentsRepository.findOne({
-        where: {
+        const enrollmentRepo = manager.getRepository(Enrollment);
+
+        // Check for an existing enrollment.
+        const existingEnrollment = await enrollmentRepo.findOne({
+          where: { studentId, courseId },
+        });
+
+        if (existingEnrollment) {
+          return {
+            enrollment: existingEnrollment,
+            created: false,
+          };
+        }
+
+        // Create a new enrollment.
+        const enrollment = enrollmentRepo.create({
           studentId,
           courseId,
-        },
+          status: EnrollmentStatus.NOT_STARTED,
+          completionPercentage: 0,
+          lessonsCompleted: 0,
+        });
+
+        const savedEnrollment = await enrollmentRepo.save(enrollment);
+
+        return {
+          enrollment: savedEnrollment,
+          created: true,
+        };
       });
-
-    if (existingEnrollment) {
-      return {
-        enrollment: existingEnrollment,
-        created: false,
-      };
-    }
-
-    // Step 3: Prepare a new enrollment.
-    const enrollment = this.enrollmentsRepository.create({
-      studentId,
-      courseId,
-      status: EnrollmentStatus.NOT_STARTED,
-      completionPercentage: 0,
-      lessonsCompleted: 0,
-    });
-
-    // Step 4: Save the enrollment.
-    try {
-      const savedEnrollment =
-        await this.enrollmentsRepository.save(enrollment);
-
-      return {
-        enrollment: savedEnrollment,
-        created: true,
-      };
     } catch (error) {
-      // Handle two simultaneous enrollment requests.
+      // Handle duplicate enrollment requests.
       if (isUniqueViolation(error)) {
-        const existing =
-          await this.enrollmentsRepository.findOne({
-            where: {
-              studentId,
-              courseId,
-            },
-          });
+        const existing = await this.enrollmentsRepository.findOne({
+          where: { studentId, courseId },
+        });
 
         if (existing) {
           return {

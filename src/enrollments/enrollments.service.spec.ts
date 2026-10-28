@@ -1,8 +1,6 @@
-
 import { NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { QueryFailedError } from 'typeorm';
-import type { Repository } from 'typeorm';
+import { DataSource, QueryFailedError, Repository } from 'typeorm';
 
 import { EnrollmentStatus } from '../common/enums/enrollment-status.enum.js';
 import { Course } from '../courses/entities/course.entity.js';
@@ -39,12 +37,27 @@ describe('EnrollmentsService', () => {
     save: vi.fn(),
   };
 
+  const mockDataSource = {
+    transaction: vi.fn(),
+  };
+
   beforeEach(() => {
     vi.resetAllMocks();
 
     service = new EnrollmentsService(
       enrollmentsRepository as unknown as Repository<Enrollment>,
       coursesRepository as unknown as Repository<Course>,
+      mockDataSource as unknown as DataSource,
+    );
+
+    mockDataSource.transaction.mockImplementation(async (callback) =>
+      callback({
+        getRepository: (entity: unknown) => {
+          if (entity === Course) return coursesRepository;
+          if (entity === Enrollment) return enrollmentsRepository;
+          throw new Error('Unexpected entity');
+        },
+      }),
     );
   });
 
@@ -85,9 +98,9 @@ describe('EnrollmentsService', () => {
   it('should reject enrollment when the course does not exist', async () => {
     coursesRepository.findOne.mockResolvedValue(null);
 
-    await expect(
-      service.enroll(studentId, courseId),
-    ).rejects.toThrow(NotFoundException);
+    await expect(service.enroll(studentId, courseId)).rejects.toThrow(
+      NotFoundException,
+    );
 
     expect(enrollmentsRepository.save).not.toHaveBeenCalled();
   });
@@ -95,15 +108,16 @@ describe('EnrollmentsService', () => {
   it('should only search for published courses', async () => {
     coursesRepository.findOne.mockResolvedValue(null);
 
-    await expect(
-      service.enroll(studentId, courseId),
-    ).rejects.toThrow(NotFoundException);
+    await expect(service.enroll(studentId, courseId)).rejects.toThrow(
+      NotFoundException,
+    );
 
     expect(coursesRepository.findOne).toHaveBeenCalledWith({
       where: {
         id: courseId,
         isPublished: true,
       },
+      lock: { mode: 'pessimistic_write' },
     });
   });
 
@@ -121,7 +135,7 @@ describe('EnrollmentsService', () => {
       [],
       Object.assign(new Error('Duplicate enrollment'), {
         code: '23505',
-       }),
+      }),
     );
 
     enrollmentsRepository.save.mockRejectedValue(duplicateError);
@@ -140,8 +154,8 @@ describe('EnrollmentsService', () => {
     const databaseError = new Error('Database unavailable');
     enrollmentsRepository.save.mockRejectedValue(databaseError);
 
-    await expect(
-      service.enroll(studentId, courseId),
-    ).rejects.toThrow('Database unavailable');
+    await expect(service.enroll(studentId, courseId)).rejects.toThrow(
+      'Database unavailable',
+    );
   });
 });
