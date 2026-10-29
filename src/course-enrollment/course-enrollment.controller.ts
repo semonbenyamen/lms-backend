@@ -1,4 +1,3 @@
-
 import {
   Controller,
   HttpStatus,
@@ -22,14 +21,12 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import type { AuthenticatedRequest } from '../auth/types/authenticated-request.type.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
-import { EnrollmentsService } from './enrollments.service.js';
+import { CourseEnrollmentCoordinator } from './course-enrollment.coordinator.js';
 
-@ApiTags('Enrollments')
+@ApiTags('Courses', 'Enrollments')
 @Controller('courses')
-export class EnrollmentsController {
-  constructor(
-    private readonly enrollmentsService: EnrollmentsService,
-  ) {}
+export class CourseEnrollmentController {
+  constructor(private readonly coordinator: CourseEnrollmentCoordinator) {}
 
   @Post(':courseId/enroll')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -47,18 +44,6 @@ export class EnrollmentsController {
     description: 'Student already enrolled',
   })
   @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: 'Invalid course ID',
-  })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'Authentication required',
-  })
-  @ApiResponse({
-    status: HttpStatus.FORBIDDEN,
-    description: 'Only students can enroll',
-  })
-  @ApiResponse({
     status: HttpStatus.NOT_FOUND,
     description: 'Course not found or unpublished',
   })
@@ -67,14 +52,9 @@ export class EnrollmentsController {
     @Req() request: AuthenticatedRequest,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await this.enrollmentsService.enroll(
-      request.user.sub,
-      courseId,
-    );
+    const result = await this.coordinator.enroll(request.user.sub, courseId);
 
-    response.status(
-      result.created ? HttpStatus.CREATED : HttpStatus.OK,
-    );
+    response.status(result.created ? HttpStatus.CREATED : HttpStatus.OK);
 
     return result.enrollment;
   }

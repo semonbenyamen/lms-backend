@@ -1,12 +1,13 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
-import { IsNull, Repository } from 'typeorm';
+import { EntityManager, IsNull, Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { CategoriesService } from '../categories/categories.service.js';
@@ -25,6 +26,7 @@ import {
 import { CourseResponseDto } from './dto/course-response.dto.js';
 import { CreateCourseDto } from './dto/create-course.dto.js';
 import { UpdateCourseDto } from './dto/update-course.dto.js';
+import { EnrollmentsService } from '../enrollments/enrollments.service.js';
 import { softDeleteSectionLessons } from '../lessons/soft-delete-section-lessons.js';
 import { Section } from '../sections/entities/section.entity.js';
 import { Course } from './entities/course.entity.js';
@@ -43,6 +45,7 @@ export class CoursesService {
     private readonly coursesRepository: Repository<Course>,
     private readonly categoriesService: CategoriesService,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly enrollmentsService: EnrollmentsService,
   ) {}
 
   async create(
@@ -144,13 +147,44 @@ export class CoursesService {
     }
   }
 
+  // Locks the course, so the enrollment that follows waits for a delete.
+  async findPublishedCourseForEnrollment(
+    id: string,
+    manager: EntityManager,
+  ): Promise<Course> {
+    const course = await manager.findOne(Course, {
+      where: { id, isPublished: true },
+      lock: { mode: 'pessimistic_write' },
+    });
+
+    if (!course) {
+      throw new NotFoundException('Course not found or unpublished');
+    }
+
+    return course;
+  }
+
   // Ownership is verified by CourseOwnershipGuard before this runs.
   async remove(id: string): Promise<void> {
-    const course = await this.findCourseEntity(id);
-
     // Soft delete the course with its sections, lessons and content together,
     // so a child is never left without a parent and its checks only need itself.
     await this.coursesRepository.manager.transaction(async (manager) => {
+      // Locked, so no student can enroll while the course is being deleted.
+      const course = await manager.findOne(Course, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!course) {
+        throw new NotFoundException(`Course with ID ${id} not found`);
+      }
+
+      if (await this.enrollmentsService.hasActiveEnrollments(id, manager)) {
+        throw new ConflictException(
+          'Cannot delete a course with active enrollments',
+        );
+      }
+
       const sections = await manager.find(Section, {
         where: { courseId: id },
         select: { id: true },

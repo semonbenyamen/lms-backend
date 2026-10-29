@@ -1,10 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
 
-import { isUniqueViolation } from '../common/database/is-unique-violation.js';
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { EntityManager, IsNull, Repository } from 'typeorm';
+
 import { EnrollmentStatus } from '../common/enums/enrollment-status.enum.js';
-import { Course } from '../courses/entities/course.entity.js';
 import { Enrollment } from './entities/enrollment.entity.js';
 
 @Injectable()
@@ -12,75 +11,67 @@ export class EnrollmentsService {
   constructor(
     @InjectRepository(Enrollment)
     private readonly enrollmentsRepository: Repository<Enrollment>,
-
-    @InjectRepository(Course)
-    private readonly coursesRepository: Repository<Course>,
-
-    private readonly dataSource: DataSource,
   ) {}
 
-  async enroll(studentId: string, courseId: string) {
-    try {
-      return await this.dataSource.transaction(async (manager) => {
-        // Lock the course during enrollment.
-        const course = await manager.getRepository(Course).findOne({
-          where: {
-            id: courseId,
-            isPublished: true,
-          },
-          lock: { mode: 'pessimistic_write' },
-        });
+  // Check if a course has active enrollments.
+  async hasActiveEnrollments(
+    courseId: string,
+    manager: EntityManager,
+  ): Promise<boolean> {
+    const count = await manager.getRepository(Enrollment).count({
+      where: {
+        courseId,
+        cancelledAt: IsNull(),
+      },
+    });
 
-        if (!course) {
-          throw new NotFoundException('Course not found or unpublished');
-        }
+    return count > 0;
+  }
 
-        const enrollmentRepo = manager.getRepository(Enrollment);
+  // Create an enrollment or return the existing one.
+  async createOrFindEnrollment(
+    studentId: string,
+    courseId: string,
+    manager: EntityManager,
+  ): Promise<{ enrollment: Enrollment; created: boolean }> {
+    const enrollmentRepo = manager.getRepository(Enrollment);
 
-        // Check for an existing enrollment.
-        const existingEnrollment = await enrollmentRepo.findOne({
-          where: { studentId, courseId },
-        });
+    // Check for an existing enrollment.
+    const existingEnrollment = await enrollmentRepo.findOne({
+      where: { studentId, courseId },
+    });
 
-        if (existingEnrollment) {
-          return {
-            enrollment: existingEnrollment,
-            created: false,
-          };
-        }
-
-        // Create a new enrollment.
-        const enrollment = enrollmentRepo.create({
-          studentId,
-          courseId,
-          status: EnrollmentStatus.NOT_STARTED,
-          completionPercentage: 0,
-          lessonsCompleted: 0,
-        });
-
-        const savedEnrollment = await enrollmentRepo.save(enrollment);
-
-        return {
-          enrollment: savedEnrollment,
-          created: true,
-        };
-      });
-    } catch (error) {
-      // Handle duplicate enrollment requests.
-      if (isUniqueViolation(error)) {
-        const existing = await this.enrollmentsRepository.findOne({
-          where: { studentId, courseId },
-        });
-
-        if (existing) {
-          return {
-            enrollment: existing,
-            created: false,
-          };
-        }
-      }
-
-      throw error;
+    if (existingEnrollment) {
+      return {
+        enrollment: existingEnrollment,
+        created: false,
+      };
     }
+
+    // Create a new enrollment.
+    const enrollment = enrollmentRepo.create({
+      studentId,
+      courseId,
+      status: EnrollmentStatus.NOT_STARTED,
+      completionPercentage: 0,
+      lessonsCompleted: 0,
+    });
+
+    const savedEnrollment = await enrollmentRepo.save(enrollment);
+
+    return {
+      enrollment: savedEnrollment,
+      created: true,
+    };
+  }
+
+  // Find an enrollment after a duplicate database error.
+  async findExistingEnrollment(
+    studentId: string,
+    courseId: string,
+  ): Promise<Enrollment | null> {
+    return this.enrollmentsRepository.findOne({
+      where: { studentId, courseId },
+    });
   }
 }

@@ -1,4 +1,9 @@
-import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { IsNull } from 'typeorm';
@@ -11,6 +16,7 @@ import { CloudinaryResourceType } from '../common/enums/cloudinary-resource-type
 import { CourseDifficulty } from '../common/enums/course-difficulty.enum.js';
 import { CourseLanguage } from '../common/enums/course-language.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
+import { EnrollmentsService } from '../enrollments/enrollments.service.js';
 import { softDeleteSectionLessons } from '../lessons/soft-delete-section-lessons.js';
 import { Section } from '../sections/entities/section.entity.js';
 import { CoursesService } from './courses.service.js';
@@ -41,9 +47,14 @@ describe('CoursesService', () => {
 
   // The delete runs its queries on the transaction manager.
   const transactionManager = {
+    findOne: vi.fn(),
     find: vi.fn(),
     softDelete: vi.fn(),
     softRemove: vi.fn(),
+  };
+
+  const mockEnrollmentsService = {
+    hasActiveEnrollments: vi.fn(),
   };
 
   const mockCategoriesService = {
@@ -131,6 +142,10 @@ describe('CoursesService', () => {
         {
           provide: CloudinaryService,
           useValue: mockCloudinaryService,
+        },
+        {
+          provide: EnrollmentsService,
+          useValue: mockEnrollmentsService,
         },
       ],
     }).compile();
@@ -496,12 +511,21 @@ describe('CoursesService', () => {
     };
 
     it('should soft delete the course with its sections, lessons and content in one transaction', async () => {
-      mockCoursesRepo.findOne.mockResolvedValue({ ...course });
+      transactionManager.findOne.mockResolvedValue({ ...course });
+      mockEnrollmentsService.hasActiveEnrollments.mockResolvedValue(false);
       transactionManager.find.mockResolvedValue([{ id: 's-1' }, { id: 's-2' }]);
 
       await service.remove('course-1');
 
       expect(mockCoursesRepo.manager.transaction).toHaveBeenCalledTimes(1);
+      expect(transactionManager.findOne).toHaveBeenCalledWith(Course, {
+        where: { id: 'course-1' },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(mockEnrollmentsService.hasActiveEnrollments).toHaveBeenCalledWith(
+        'course-1',
+        transactionManager,
+      );
       expect(transactionManager.find).toHaveBeenCalledWith(Section, {
         where: { courseId: 'course-1' },
         select: { id: true },
@@ -523,12 +547,56 @@ describe('CoursesService', () => {
     });
 
     it('should reject deletion when the course does not exist', async () => {
-      mockCoursesRepo.findOne.mockResolvedValue(null);
+      transactionManager.findOne.mockResolvedValue(null);
 
       await expect(service.remove('missing-course')).rejects.toThrow(
         NotFoundException,
       );
-      expect(mockCoursesRepo.manager.transaction).not.toHaveBeenCalled();
+      expect(
+        mockEnrollmentsService.hasActiveEnrollments,
+      ).not.toHaveBeenCalled();
+      expect(transactionManager.softRemove).not.toHaveBeenCalled();
+    });
+
+    it('should reject deletion when the course has active enrollments', async () => {
+      transactionManager.findOne.mockResolvedValue({ ...course });
+      mockEnrollmentsService.hasActiveEnrollments.mockResolvedValue(true);
+
+      await expect(service.remove('course-1')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(softDeleteSectionLessons).not.toHaveBeenCalled();
+      expect(transactionManager.softDelete).not.toHaveBeenCalled();
+      expect(transactionManager.softRemove).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Course Enrollment Lookup', () => {
+    it('should lock and return a published course', async () => {
+      const course = { id: 'course-1', isPublished: true };
+      transactionManager.findOne.mockResolvedValue(course);
+
+      await expect(
+        service.findPublishedCourseForEnrollment(
+          'course-1',
+          transactionManager as never,
+        ),
+      ).resolves.toBe(course);
+      expect(transactionManager.findOne).toHaveBeenCalledWith(Course, {
+        where: { id: 'course-1', isPublished: true },
+        lock: { mode: 'pessimistic_write' },
+      });
+    });
+
+    it('should reject a missing or unpublished course', async () => {
+      transactionManager.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.findPublishedCourseForEnrollment(
+          'course-1',
+          transactionManager as never,
+        ),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

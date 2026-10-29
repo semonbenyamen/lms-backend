@@ -1,9 +1,8 @@
-import { NotFoundException } from '@nestjs/common';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DataSource, QueryFailedError, Repository } from 'typeorm';
+import { EntityManager, IsNull, Repository } from 'typeorm';
 
 import { EnrollmentStatus } from '../common/enums/enrollment-status.enum.js';
-import { Course } from '../courses/entities/course.entity.js';
 import { Enrollment } from './entities/enrollment.entity.js';
 import { EnrollmentsService } from './enrollments.service.js';
 
@@ -12,11 +11,6 @@ describe('EnrollmentsService', () => {
 
   const studentId = 'student-123';
   const courseId = 'course-123';
-
-  const publishedCourse = {
-    id: courseId,
-    isPublished: true,
-  } as Course;
 
   const existingEnrollment = {
     id: 'enrollment-123',
@@ -27,18 +21,15 @@ describe('EnrollmentsService', () => {
     lessonsCompleted: 0,
   } as Enrollment;
 
-  const coursesRepository = {
-    findOne: vi.fn(),
-  };
-
   const enrollmentsRepository = {
     findOne: vi.fn(),
     create: vi.fn(),
     save: vi.fn(),
+    count: vi.fn(),
   };
 
-  const mockDataSource = {
-    transaction: vi.fn(),
+  const manager = {
+    getRepository: vi.fn(),
   };
 
   beforeEach(() => {
@@ -46,31 +37,26 @@ describe('EnrollmentsService', () => {
 
     service = new EnrollmentsService(
       enrollmentsRepository as unknown as Repository<Enrollment>,
-      coursesRepository as unknown as Repository<Course>,
-      mockDataSource as unknown as DataSource,
     );
 
-    mockDataSource.transaction.mockImplementation(async (callback) =>
-      callback({
-        getRepository: (entity: unknown) => {
-          if (entity === Course) return coursesRepository;
-          if (entity === Enrollment) return enrollmentsRepository;
-          throw new Error('Unexpected entity');
-        },
-      }),
-    );
+    manager.getRepository.mockReturnValue(enrollmentsRepository);
   });
 
-  it('should enroll a student in a published course', async () => {
-    coursesRepository.findOne.mockResolvedValue(publishedCourse);
+  it('should create a new enrollment', async () => {
     enrollmentsRepository.findOne.mockResolvedValue(null);
     enrollmentsRepository.create.mockReturnValue(existingEnrollment);
     enrollmentsRepository.save.mockResolvedValue(existingEnrollment);
 
-    const result = await service.enroll(studentId, courseId);
+    const result = await service.createOrFindEnrollment(
+      studentId,
+      courseId,
+      manager as unknown as EntityManager,
+    );
 
-    expect(result.created).toBe(true);
-    expect(result.enrollment).toEqual(existingEnrollment);
+    expect(result).toEqual({
+      enrollment: existingEnrollment,
+      created: true,
+    });
 
     expect(enrollmentsRepository.create).toHaveBeenCalledWith({
       studentId,
@@ -83,79 +69,75 @@ describe('EnrollmentsService', () => {
     expect(enrollmentsRepository.save).toHaveBeenCalledOnce();
   });
 
-  it('should return existing enrollment without creating a duplicate', async () => {
-    coursesRepository.findOne.mockResolvedValue(publishedCourse);
+  it('should return an existing enrollment', async () => {
     enrollmentsRepository.findOne.mockResolvedValue(existingEnrollment);
 
-    const result = await service.enroll(studentId, courseId);
+    const result = await service.createOrFindEnrollment(
+      studentId,
+      courseId,
+      manager as unknown as EntityManager,
+    );
 
-    expect(result.created).toBe(false);
-    expect(result.enrollment).toEqual(existingEnrollment);
+    expect(result).toEqual({
+      enrollment: existingEnrollment,
+      created: false,
+    });
+
     expect(enrollmentsRepository.create).not.toHaveBeenCalled();
     expect(enrollmentsRepository.save).not.toHaveBeenCalled();
   });
 
-  it('should reject enrollment when the course does not exist', async () => {
-    coursesRepository.findOne.mockResolvedValue(null);
+  it('should detect active enrollments', async () => {
+    enrollmentsRepository.count.mockResolvedValue(1);
 
-    await expect(service.enroll(studentId, courseId)).rejects.toThrow(
-      NotFoundException,
+    const result = await service.hasActiveEnrollments(
+      courseId,
+      manager as unknown as EntityManager,
     );
 
-    expect(enrollmentsRepository.save).not.toHaveBeenCalled();
-  });
+    expect(result).toBe(true);
 
-  it('should only search for published courses', async () => {
-    coursesRepository.findOne.mockResolvedValue(null);
-
-    await expect(service.enroll(studentId, courseId)).rejects.toThrow(
-      NotFoundException,
-    );
-
-    expect(coursesRepository.findOne).toHaveBeenCalledWith({
+    expect(enrollmentsRepository.count).toHaveBeenCalledWith({
       where: {
-        id: courseId,
-        isPublished: true,
+        courseId,
+        cancelledAt: IsNull(),
       },
-      lock: { mode: 'pessimistic_write' },
     });
   });
 
-  it('should handle duplicate enrollment database errors', async () => {
-    coursesRepository.findOne.mockResolvedValue(publishedCourse);
+  it('should allow deletion when no active enrollments exist', async () => {
+    enrollmentsRepository.count.mockResolvedValue(0);
 
-    enrollmentsRepository.findOne
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(existingEnrollment);
-
-    enrollmentsRepository.create.mockReturnValue(existingEnrollment);
-
-    const duplicateError = new QueryFailedError(
-      'INSERT INTO enrollments',
-      [],
-      Object.assign(new Error('Duplicate enrollment'), {
-        code: '23505',
-      }),
+    const result = await service.hasActiveEnrollments(
+      courseId,
+      manager as unknown as EntityManager,
     );
 
-    enrollmentsRepository.save.mockRejectedValue(duplicateError);
-
-    const result = await service.enroll(studentId, courseId);
-
-    expect(result.created).toBe(false);
-    expect(result.enrollment).toEqual(existingEnrollment);
+    expect(result).toBe(false);
   });
 
-  it('should rethrow unexpected database errors', async () => {
-    coursesRepository.findOne.mockResolvedValue(publishedCourse);
-    enrollmentsRepository.findOne.mockResolvedValue(null);
-    enrollmentsRepository.create.mockReturnValue(existingEnrollment);
+  it('should find an existing enrollment', async () => {
+    enrollmentsRepository.findOne.mockResolvedValue(existingEnrollment);
 
-    const databaseError = new Error('Database unavailable');
-    enrollmentsRepository.save.mockRejectedValue(databaseError);
-
-    await expect(service.enroll(studentId, courseId)).rejects.toThrow(
-      'Database unavailable',
+    const result = await service.findExistingEnrollment(
+      studentId,
+      courseId,
     );
+
+    expect(result).toEqual(existingEnrollment);
+    expect(enrollmentsRepository.findOne).toHaveBeenCalledWith({
+      where: { studentId, courseId },
+    });
+  });
+
+  it('should return null when enrollment does not exist', async () => {
+    enrollmentsRepository.findOne.mockResolvedValue(null);
+
+    const result = await service.findExistingEnrollment(
+      studentId,
+      courseId,
+    );
+
+    expect(result).toBeNull();
   });
 });
