@@ -61,7 +61,7 @@ describe('CoursesController', () => {
     const dto = {
       title: 'Course 1',
       description: 'Desc',
-      category: 'Cat',
+      categoryId: 'category-1',
       topics: ['Topic 1'],
     };
     mockCoursesService.create.mockResolvedValue({ id: 'c-1', ...dto });
@@ -134,4 +134,3 @@ describe('CoursesController', () => {
     );
   });
 });
-

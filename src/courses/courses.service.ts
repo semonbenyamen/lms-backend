@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
+import { CategoriesService } from '../categories/categories.service.js';
 import {
   assertAdminOrInstructor,
   assertOwnershipOrAdmin,
@@ -19,6 +20,7 @@ export class CoursesService {
   constructor(
     @InjectRepository(Course)
     private readonly coursesRepository: Repository<Course>,
+    private readonly categoriesService: CategoriesService,
   ) {}
 
   async create(
@@ -26,20 +28,11 @@ export class CoursesService {
     user: JwtPayload,
   ): Promise<Course> {
     assertAdminOrInstructor(user.role);
+    await this.categoriesService.assertExists(createCourseDto.categoryId);
 
+    // Fields left out take the entity defaults; new courses start as drafts.
     const course = this.coursesRepository.create({
-      title: createCourseDto.title,
-      description: createCourseDto.description,
-      category: createCourseDto.category,
-      topics: createCourseDto.topics ?? [],
-      difficulty: createCourseDto.difficulty ?? null,
-      language: createCourseDto.language ?? 'en',
-      prerequisites: createCourseDto.prerequisites ?? null,
-      estimatedDuration: createCourseDto.estimatedDuration ?? null,
-
-      // New courses start as drafts until publishing requirements are met.
-      isPublished: false,
-
+      ...createCourseDto,
       instructorId: user.sub,
     });
 
@@ -118,8 +111,9 @@ export class CoursesService {
     if (updateCourseDto.description !== undefined) {
       course.description = updateCourseDto.description;
     }
-    if (updateCourseDto.category !== undefined) {
-      course.category = updateCourseDto.category;
+    if (updateCourseDto.categoryId !== undefined) {
+      await this.categoriesService.assertExists(updateCourseDto.categoryId);
+      course.categoryId = updateCourseDto.categoryId;
     }
     if (updateCourseDto.topics !== undefined) {
       course.topics = updateCourseDto.topics;

@@ -13,6 +13,7 @@ import { envValidationSchema } from './config/env.validation.js';
 import { HealthModule } from './health/health.module.js';
 import { UsersModule } from './users/users.module.js';
 import { CoursesModule } from './courses/courses.module.js';
+import { CategoriesModule } from './categories/categories.module.js';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { CoursesModule } from './courses/courses.module.js';
     UsersModule,
     AuthModule,
     CoursesModule,
+    CategoriesModule,
   ],
 
   controllers: [AppController],

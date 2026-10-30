@@ -8,7 +8,9 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
+import { CategoriesService } from '../categories/categories.service.js';
 import { CourseDifficulty } from '../common/enums/course-difficulty.enum.js';
+import { CourseLanguage } from '../common/enums/course-language.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { CoursesService } from './courses.service.js';
 import { Course } from './entities/course.entity.js';
@@ -23,6 +25,10 @@ describe('CoursesService', () => {
     remove: vi.fn(),
     softRemove: vi.fn(),
     createQueryBuilder: vi.fn(),
+  };
+
+  const mockCategoriesService = {
+    assertExists: vi.fn(),
   };
 
   const instructorUser: JwtPayload = {
@@ -59,6 +65,10 @@ describe('CoursesService', () => {
           provide: getRepositoryToken(Course),
           useValue: mockCoursesRepo,
         },
+        {
+          provide: CategoriesService,
+          useValue: mockCategoriesService,
+        },
       ],
     }).compile();
 
@@ -69,13 +79,12 @@ describe('CoursesService', () => {
     const createDto = {
       title: 'NestJS Full Course',
       description: 'Comprehensive course on NestJS architecture',
-      category: 'Software Engineering',
+      categoryId: 'category-uuid-1',
       topics: ['NestJS', 'TypeScript', 'Clean Architecture'],
       difficulty: CourseDifficulty.INTERMEDIATE,
-      language: 'en',
+      language: CourseLanguage.ENGLISH,
       prerequisites: ['JavaScript Basics'],
       estimatedDuration: 180,
-      isPublished: false,
     };
 
     it('should allow an instructor to create a course', async () => {
@@ -89,17 +98,26 @@ describe('CoursesService', () => {
 
       const result = await service.create(createDto, instructorUser);
 
-      expect(mockCoursesRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: createDto.title,
-          description: createDto.description,
-          category: createDto.category,
-          topics: createDto.topics,
-          instructorId: instructorUser.sub,
-        }),
+      expect(mockCategoriesService.assertExists).toHaveBeenCalledWith(
+        createDto.categoryId,
       );
+      expect(mockCoursesRepo.create).toHaveBeenCalledWith({
+        ...createDto,
+        instructorId: instructorUser.sub,
+      });
       expect(mockCoursesRepo.save).toHaveBeenCalledWith(mockCourse);
       expect(result).toEqual(mockCourse);
+    });
+
+    it('should not create a course with an unknown category', async () => {
+      mockCategoriesService.assertExists.mockRejectedValueOnce(
+        new NotFoundException(),
+      );
+
+      await expect(service.create(createDto, instructorUser)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(mockCoursesRepo.save).not.toHaveBeenCalled();
     });
 
     it('should allow an admin to create a course', async () => {
@@ -300,6 +318,18 @@ describe('CoursesService', () => {
       );
 
       expect(updated.title).toBe('Admin Updated Title');
+    });
+
+    it('should check the new category exists before moving the course to it', async () => {
+      mockCoursesRepo.findOne.mockResolvedValue({ ...course });
+      mockCategoriesService.assertExists.mockRejectedValueOnce(
+        new NotFoundException(),
+      );
+
+      await expect(
+        service.update('course-1', { categoryId: 'missing' }, instructorUser),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockCoursesRepo.save).not.toHaveBeenCalled();
     });
   });
 
