@@ -26,12 +26,12 @@ import { RolesGuard } from '../auth/guards/roles.guard.js';
 import type { AuthenticatedRequest } from '../auth/types/authenticated-request.type.js';
 import { ApiSuccessResponse } from '../common/decorators/api-success-response.decorator.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
+import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
 import { CoursesService } from './courses.service.js';
 import { CourseResponseDto } from './dto/course-response.dto.js';
 import { CreateCourseDto } from './dto/create-course.dto.js';
-// Reuse the shared pagination DTO across modules.
-import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
 import { UpdateCourseDto } from './dto/update-course.dto.js';
+import { CourseOwnershipGuard } from './guards/course-ownership.guard.js';
 
 @ApiTags('Courses')
 @Controller('courses')
@@ -42,7 +42,9 @@ export class CoursesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Create a new course (Instructor or Admin)' })
+  @ApiOperation({
+    summary: 'Create a new course (Instructor or Admin)',
+  })
   @ApiSuccessResponse(CourseResponseDto, HttpStatus.CREATED)
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
@@ -56,11 +58,15 @@ export class CoursesController {
     status: HttpStatus.FORBIDDEN,
     description: 'Forbidden - only instructors and admins can create courses',
   })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Category not found',
+  })
   create(
     @Body() createCourseDto: CreateCourseDto,
     @Req() request: AuthenticatedRequest,
   ) {
-    return this.coursesService.create(createCourseDto, request.user);
+    return this.coursesService.create(createCourseDto, request.user.sub);
   }
 
   @Get()
@@ -89,10 +95,9 @@ export class CoursesController {
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  // Document only the course details currently returned by the service.
   @ApiOperation({
-  summary: 'Get course details by ID',
-})
+    summary: 'Get course details by ID',
+  })
   @ApiSuccessResponse(CourseResponseDto, HttpStatus.OK)
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
@@ -114,10 +119,13 @@ export class CoursesController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  // Authenticate the user, check their role, then verify course ownership.
+  @UseGuards(JwtAuthGuard, RolesGuard, CourseOwnershipGuard)
   @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update a course by ID (Course Owner or Admin)' })
+  @ApiOperation({
+    summary: 'Update a course by ID (Course Owner or Admin)',
+  })
   @ApiSuccessResponse(CourseResponseDto, HttpStatus.OK)
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
@@ -133,29 +141,29 @@ export class CoursesController {
   })
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,
-    description: 'Course not found',
+    description: 'Course or category not found',
   })
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() updateCourseDto: UpdateCourseDto,
-    @Req() request: AuthenticatedRequest,
   ) {
-    return this.coursesService.update(id, updateCourseDto, request.user);
+    // Ownership is verified by CourseOwnershipGuard.
+    return this.coursesService.update(id, updateCourseDto);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  // Authenticate the user, check their role, then verify course ownership.
+  @UseGuards(JwtAuthGuard, RolesGuard, CourseOwnershipGuard)
   @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiBearerAuth()
-  // Course deletion preserves the record using soft delete.
   @ApiOperation({
-  summary: 'Soft delete a course by ID (Course Owner or Admin)',
-})
+    summary: 'Soft delete a course by ID (Course Owner or Admin)',
+  })
   @ApiResponse({
-  status: HttpStatus.NO_CONTENT,
-  description: 'Course soft deleted successfully',
-})
+    status: HttpStatus.NO_CONTENT,
+    description: 'Course soft deleted successfully',
+  })
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
     description: 'Invalid UUID format',
@@ -172,10 +180,8 @@ export class CoursesController {
     status: HttpStatus.NOT_FOUND,
     description: 'Course not found',
   })
-  remove(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    return this.coursesService.remove(id, request.user);
+  remove(@Param('id', new ParseUUIDPipe()) id: string) {
+    // Ownership is verified by CourseOwnershipGuard.
+    return this.coursesService.remove(id);
   }
 }

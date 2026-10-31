@@ -6,11 +6,12 @@ import { CategoriesModule } from '../categories/categories.module.js';
 import { CoursesController } from './courses.controller.js';
 import { CoursesService } from './courses.service.js';
 import { Course } from './entities/course.entity.js';
+import { CourseOwnershipGuard } from './guards/course-ownership.guard.js';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Course]), AuthModule, CategoriesModule],
   controllers: [CoursesController],
-  providers: [CoursesService],
-  exports: [CoursesService],
+  providers: [CoursesService, CourseOwnershipGuard],
+  exports: [CoursesService, CourseOwnershipGuard],
 })
 export class CoursesModule {}

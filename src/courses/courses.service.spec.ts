@@ -1,13 +1,9 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { JwtPayload } from '../auth/types/authenticated-request.type.js';
+import type { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { CategoriesService } from '../categories/categories.service.js';
 import { CourseDifficulty } from '../common/enums/course-difficulty.enum.js';
 import { CourseLanguage } from '../common/enums/course-language.enum.js';
@@ -21,6 +17,9 @@ describe('CoursesService', () => {
   const mockCoursesRepo = {
     create: vi.fn(),
     save: vi.fn(),
+    merge: vi.fn((course: object, changes: object) =>
+      Object.assign(course, changes),
+    ),
     findOne: vi.fn(),
     remove: vi.fn(),
     softRemove: vi.fn(),
@@ -31,8 +30,10 @@ describe('CoursesService', () => {
     assertExists: vi.fn(),
   };
 
+  const instructorId = 'instructor-uuid-1';
+
   const instructorUser: JwtPayload = {
-    sub: 'instructor-uuid-1',
+    sub: instructorId,
     email: 'instructor@example.com',
     role: UserRole.INSTRUCTOR,
   };
@@ -87,23 +88,23 @@ describe('CoursesService', () => {
       estimatedDuration: 180,
     };
 
-    it('should allow an instructor to create a course', async () => {
+    it('should create a course owned by the given instructor', async () => {
       const mockCourse = {
         id: 'course-1',
         ...createDto,
-        instructorId: instructorUser.sub,
+        instructorId,
       };
       mockCoursesRepo.create.mockReturnValue(mockCourse);
       mockCoursesRepo.save.mockResolvedValue(mockCourse);
 
-      const result = await service.create(createDto, instructorUser);
+      const result = await service.create(createDto, instructorId);
 
       expect(mockCategoriesService.assertExists).toHaveBeenCalledWith(
         createDto.categoryId,
       );
       expect(mockCoursesRepo.create).toHaveBeenCalledWith({
         ...createDto,
-        instructorId: instructorUser.sub,
+        instructorId,
       });
       expect(mockCoursesRepo.save).toHaveBeenCalledWith(mockCourse);
       expect(result).toEqual(mockCourse);
@@ -114,30 +115,10 @@ describe('CoursesService', () => {
         new NotFoundException(),
       );
 
-      await expect(service.create(createDto, instructorUser)).rejects.toThrow(
+      await expect(service.create(createDto, instructorId)).rejects.toThrow(
         NotFoundException,
       );
       expect(mockCoursesRepo.save).not.toHaveBeenCalled();
-    });
-
-    it('should allow an admin to create a course', async () => {
-      const mockCourse = {
-        id: 'course-1',
-        ...createDto,
-        instructorId: adminUser.sub,
-      };
-      mockCoursesRepo.create.mockReturnValue(mockCourse);
-      mockCoursesRepo.save.mockResolvedValue(mockCourse);
-
-      const result = await service.create(createDto, adminUser);
-
-      expect(result).toEqual(mockCourse);
-    });
-
-    it('should throw ForbiddenException if a student tries to create a course', async () => {
-      await expect(service.create(createDto, studentUser)).rejects.toThrow(
-        ForbiddenException,
-      );
     });
   });
 
@@ -274,50 +255,49 @@ describe('CoursesService', () => {
     });
   });
 
-  describe('Course Update & Ownership Checks', () => {
+  describe('Course Update', () => {
     const course = {
       id: 'course-1',
       title: 'Original Title',
-      instructorId: instructorUser.sub,
+      instructorId,
     };
 
-    it('should allow the owner instructor to update the course', async () => {
+    it('should update the provided course fields', async () => {
       mockCoursesRepo.findOne.mockResolvedValue({ ...course });
       mockCoursesRepo.save.mockImplementation((c) => Promise.resolve(c));
 
-      const updated = await service.update(
-        'course-1',
-        { title: 'Updated Title' },
-        instructorUser,
-      );
+      const updated = await service.update('course-1', {
+        title: 'Updated Title',
+      });
 
       expect(updated.title).toBe('Updated Title');
-      expect(mockCoursesRepo.save).toHaveBeenCalled();
+      expect(mockCoursesRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'course-1',
+          title: 'Updated Title',
+        }),
+      );
     });
 
-    it('should forbid another instructor from updating the course', async () => {
-      mockCoursesRepo.findOne.mockResolvedValue({ ...course });
-
-      await expect(
-        service.update(
-          'course-1',
-          { title: 'Hacked Title' },
-          otherInstructorUser,
-        ),
-      ).rejects.toThrow(ForbiddenException);
-    });
-
-    it('should allow an admin to update any course', async () => {
+    it('should preserve fields not included in the update', async () => {
       mockCoursesRepo.findOne.mockResolvedValue({ ...course });
       mockCoursesRepo.save.mockImplementation((c) => Promise.resolve(c));
 
-      const updated = await service.update(
-        'course-1',
-        { title: 'Admin Updated Title' },
-        adminUser,
-      );
+      const updated = await service.update('course-1', {
+        title: 'New Title',
+      });
 
-      expect(updated.title).toBe('Admin Updated Title');
+      expect(updated.instructorId).toBe(instructorId);
+    });
+
+    it('should reject updates for courses that do not exist', async () => {
+      mockCoursesRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.update('missing-course', { title: 'New Title' }),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(mockCoursesRepo.save).not.toHaveBeenCalled();
     });
 
     it('should check the new category exists before moving the course to it', async () => {
@@ -327,51 +307,37 @@ describe('CoursesService', () => {
       );
 
       await expect(
-        service.update('course-1', { categoryId: 'missing' }, instructorUser),
+        service.update('course-1', { categoryId: 'missing' }),
       ).rejects.toThrow(NotFoundException);
       expect(mockCoursesRepo.save).not.toHaveBeenCalled();
     });
   });
 
-  describe('Course Deletion & Ownership Checks', () => {
+  describe('Course Deletion', () => {
     const course = {
       id: 'course-1',
       title: 'Course to Delete',
-      instructorId: instructorUser.sub,
+      instructorId,
     };
 
-    it('should allow the owner instructor to soft delete the course', async () => {
+    it('should soft delete the course', async () => {
       mockCoursesRepo.findOne.mockResolvedValue({ ...course });
       mockCoursesRepo.softRemove.mockResolvedValue(undefined);
 
-      await service.remove('course-1', instructorUser);
+      await service.remove('course-1');
 
       // Verify that deletion preserves the database record.
       expect(mockCoursesRepo.softRemove).toHaveBeenCalledWith(course);
       expect(mockCoursesRepo.remove).not.toHaveBeenCalled();
     });
 
-    it('should forbid another instructor from deleting the course', async () => {
-      mockCoursesRepo.findOne.mockResolvedValue({ ...course });
+    it('should reject deletion when the course does not exist', async () => {
+      mockCoursesRepo.findOne.mockResolvedValue(null);
 
-      await expect(
-        service.remove('course-1', otherInstructorUser),
-      ).rejects.toThrow(ForbiddenException);
-
-      // Unauthorized users must not trigger any deletion.
+      await expect(service.remove('missing-course')).rejects.toThrow(
+        NotFoundException,
+      );
       expect(mockCoursesRepo.softRemove).not.toHaveBeenCalled();
-      expect(mockCoursesRepo.remove).not.toHaveBeenCalled();
-    });
-
-    it('should allow an admin to soft delete any course', async () => {
-      mockCoursesRepo.findOne.mockResolvedValue({ ...course });
-      mockCoursesRepo.softRemove.mockResolvedValue(undefined);
-
-      await service.remove('course-1', adminUser);
-
-      // Admin deletion must also use soft delete.
-      expect(mockCoursesRepo.softRemove).toHaveBeenCalledWith(course);
-      expect(mockCoursesRepo.remove).not.toHaveBeenCalled();
     });
   });
 });

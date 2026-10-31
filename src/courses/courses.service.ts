@@ -4,10 +4,6 @@ import { Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { CategoriesService } from '../categories/categories.service.js';
-import {
-  assertAdminOrInstructor,
-  assertOwnershipOrAdmin,
-} from '../common/authorization/authorization.util.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
 import { getPaginationParams } from '../common/pagintion/pagination.util.js';
@@ -25,15 +21,14 @@ export class CoursesService {
 
   async create(
     createCourseDto: CreateCourseDto,
-    user: JwtPayload,
+    instructorId: string,
   ): Promise<Course> {
-    assertAdminOrInstructor(user.role);
     await this.categoriesService.assertExists(createCourseDto.categoryId);
 
     // Fields left out take the entity defaults; new courses start as drafts.
     const course = this.coursesRepository.create({
       ...createCourseDto,
-      instructorId: user.sub,
+      instructorId,
     });
 
     return this.coursesRepository.save(course);
@@ -75,13 +70,7 @@ export class CoursesService {
   }
 
   async findById(id: string, user?: JwtPayload): Promise<Course> {
-    const course = await this.coursesRepository.findOne({
-      where: { id },
-    });
-
-    if (!course) {
-      throw new NotFoundException(`Course with ID ${id} not found`);
-    }
+    const course = await this.findCourseEntity(id);
 
     const isOwner =
       user?.role === UserRole.INSTRUCTOR && course.instructorId === user.sub;
@@ -95,50 +84,23 @@ export class CoursesService {
     return course;
   }
 
-  async update(
-    id: string,
-    updateCourseDto: UpdateCourseDto,
-    user: JwtPayload,
-  ): Promise<Course> {
+  // Ownership is verified by CourseOwnershipGuard before this runs.
+  async update(id: string, updateCourseDto: UpdateCourseDto): Promise<Course> {
     const course = await this.findCourseEntity(id);
 
-    // Apply the shared ownership and administrator authorization rules.
-    assertOwnershipOrAdmin(user.role, user.sub, course.instructorId, 'update');
-
-    if (updateCourseDto.title !== undefined) {
-      course.title = updateCourseDto.title;
-    }
-    if (updateCourseDto.description !== undefined) {
-      course.description = updateCourseDto.description;
-    }
     if (updateCourseDto.categoryId !== undefined) {
       await this.categoriesService.assertExists(updateCourseDto.categoryId);
-      course.categoryId = updateCourseDto.categoryId;
-    }
-    if (updateCourseDto.topics !== undefined) {
-      course.topics = updateCourseDto.topics;
-    }
-    if (updateCourseDto.difficulty !== undefined) {
-      course.difficulty = updateCourseDto.difficulty;
-    }
-    if (updateCourseDto.language !== undefined) {
-      course.language = updateCourseDto.language;
-    }
-    if (updateCourseDto.prerequisites !== undefined) {
-      course.prerequisites = updateCourseDto.prerequisites;
-    }
-    if (updateCourseDto.estimatedDuration !== undefined) {
-      course.estimatedDuration = updateCourseDto.estimatedDuration;
     }
 
-    return this.coursesRepository.save(course);
+    // Apply only the fields provided in the update request.
+    return this.coursesRepository.save(
+      this.coursesRepository.merge(course, updateCourseDto),
+    );
   }
 
-  async remove(id: string, user: JwtPayload): Promise<void> {
+  // Ownership is verified by CourseOwnershipGuard before this runs.
+  async remove(id: string): Promise<void> {
     const course = await this.findCourseEntity(id);
-
-    // Only the course owner or an administrator can delete the course.
-    assertOwnershipOrAdmin(user.role, user.sub, course.instructorId, 'delete');
 
     // Preserve the course record instead of permanently deleting it.
     await this.coursesRepository.softRemove(course);
