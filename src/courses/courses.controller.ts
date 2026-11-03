@@ -69,7 +69,7 @@ export class CoursesController {
     return this.coursesService.create(createCourseDto, request.user.sub);
   }
 
-  @Get()
+  @Get('manage')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiBearerAuth()
@@ -96,7 +96,7 @@ export class CoursesController {
     return this.coursesService.findAll(paginationQuery, request.user);
   }
 
-  @Get(':id')
+  @Get('manage/:id')
   // Authenticate the user, check their role, then verify course ownership.
   @UseGuards(JwtAuthGuard, RolesGuard, CourseOwnershipGuard)
   @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
