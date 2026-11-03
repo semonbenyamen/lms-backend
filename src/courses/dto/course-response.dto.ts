@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { SectionResponseDto } from '../../sections/dto/section-response.dto.js';
 
 import { CourseDifficulty } from '../../common/enums/course-difficulty.enum.js';
+import { CourseLanguage } from '../../common/enums/course-language.enum.js';
 
 export class CourseResponseDto {
   @ApiProperty({
@@ -24,10 +25,10 @@ export class CourseResponseDto {
   description: string;
 
   @ApiProperty({
-    example: 'Backend Development',
-    description: 'The category of the course',
+    example: '550e8400-e29b-41d4-a716-446655440010',
+    description: 'The category of the course, from GET /categories',
   })
-  category: string;
+  categoryId: string;
 
   @ApiProperty({
     example: ['NestJS', 'TypeORM', 'PostgreSQL'],
@@ -45,10 +46,11 @@ export class CourseResponseDto {
   difficulty: CourseDifficulty | null;
 
   @ApiProperty({
-    example: 'en',
+    enum: CourseLanguage,
+    example: CourseLanguage.ENGLISH,
     description: 'Language of the course',
   })
-  language: string;
+  language: CourseLanguage;
 
   @ApiPropertyOptional({
     example: ['Basic TypeScript', 'Node.js fundamentals'],
