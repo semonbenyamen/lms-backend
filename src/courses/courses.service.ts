@@ -36,7 +36,7 @@ export class CoursesService {
 
   async findAll(
     paginationQuery: PaginationQueryDto,
-    user: JwtPayload,
+    user: Pick<JwtPayload, 'sub' | 'role'>,
   ): Promise<Course[]> {
     const { skip, take } = getPaginationParams(paginationQuery);
 
