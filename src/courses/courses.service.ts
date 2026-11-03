@@ -35,8 +35,8 @@ export class CoursesService {
   }
 
   async findAll(
-    paginationQuery?: PaginationQueryDto,
-    user?: JwtPayload,
+    paginationQuery: PaginationQueryDto,
+    user: JwtPayload,
   ): Promise<Course[]> {
     const { skip, take } = getPaginationParams(paginationQuery);
 
@@ -46,22 +46,10 @@ export class CoursesService {
       .skip(skip)
       .take(take);
 
-    // Show draft courses only to their owners and administrators.
-    if (user) {
-      if (user.role === UserRole.STUDENT) {
-        queryBuilder.andWhere('course.isPublished = :isPublished', {
-          isPublished: true,
-        });
-      } else if (user.role === UserRole.INSTRUCTOR) {
-        queryBuilder.andWhere(
-          '(course.isPublished = :isPublished OR course.instructorId = :instructorId)',
-          { isPublished: true, instructorId: user.sub },
-        );
-      }
-      // Administrators can view all active courses.
-    } else {
-      queryBuilder.andWhere('course.isPublished = :isPublished', {
-        isPublished: true,
+    // Administrators see all courses, instructors only their own.
+    if (user.role !== UserRole.ADMIN) {
+      queryBuilder.andWhere('course.instructorId = :instructorId', {
+        instructorId: user.sub,
       });
     }
 
@@ -69,19 +57,9 @@ export class CoursesService {
     return queryBuilder.getMany();
   }
 
-  async findById(id: string, user?: JwtPayload): Promise<Course> {
-    const course = await this.findCourseEntity(id);
-
-    const isOwner =
-      user?.role === UserRole.INSTRUCTOR && course.instructorId === user.sub;
-
-    const isAdmin = user?.role === UserRole.ADMIN;
-
-    if (!course.isPublished && !isOwner && !isAdmin) {
-      throw new NotFoundException(`Course with ID ${id} not found`);
-    }
-
-    return course;
+  // Ownership is verified by CourseOwnershipGuard before this runs.
+  async findById(id: string): Promise<Course> {
+    return this.findCourseEntity(id);
   }
 
   // Ownership is verified by CourseOwnershipGuard before this runs.

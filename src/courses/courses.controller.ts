@@ -70,11 +70,11 @@ export class CoursesController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({
-    summary:
-      'List courses with pagination (Students see only published courses)',
+    summary: 'List courses for the dashboard (Admin all, Instructor own)',
   })
   @ApiSuccessResponse(CourseResponseDto, HttpStatus.OK, { isArray: true })
   @ApiResponse({
@@ -85,6 +85,10 @@ export class CoursesController {
     status: HttpStatus.UNAUTHORIZED,
     description: 'Authentication required',
   })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'Forbidden - only instructors and admins can list courses',
+  })
   findAll(
     @Query() paginationQuery: PaginationQueryDto,
     @Req() request: AuthenticatedRequest,
@@ -93,10 +97,12 @@ export class CoursesController {
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
+  // Authenticate the user, check their role, then verify course ownership.
+  @UseGuards(JwtAuthGuard, RolesGuard, CourseOwnershipGuard)
+  @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Get course details by ID',
+    summary: 'Get course details by ID (Course Owner or Admin)',
   })
   @ApiSuccessResponse(CourseResponseDto, HttpStatus.OK)
   @ApiResponse({
@@ -108,14 +114,16 @@ export class CoursesController {
     description: 'Authentication required',
   })
   @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: 'Course not found or unpublished',
+    status: HttpStatus.FORBIDDEN,
+    description: 'Forbidden - not course owner or admin',
   })
-  findOne(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    return this.coursesService.findById(id, request.user);
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Course not found',
+  })
+  findOne(@Param('id', new ParseUUIDPipe()) id: string) {
+    // Ownership is verified by CourseOwnershipGuard.
+    return this.coursesService.findById(id);
   }
 
   @Patch(':id')

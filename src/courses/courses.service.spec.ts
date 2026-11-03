@@ -38,22 +38,10 @@ describe('CoursesService', () => {
     role: UserRole.INSTRUCTOR,
   };
 
-  const otherInstructorUser: JwtPayload = {
-    sub: 'instructor-uuid-2',
-    email: 'other@example.com',
-    role: UserRole.INSTRUCTOR,
-  };
-
   const adminUser: JwtPayload = {
     sub: 'admin-uuid-1',
     email: 'admin@example.com',
     role: UserRole.ADMIN,
-  };
-
-  const studentUser: JwtPayload = {
-    sub: 'student-uuid-1',
-    email: 'student@example.com',
-    role: UserRole.STUDENT,
   };
 
   beforeEach(async () => {
@@ -143,7 +131,7 @@ describe('CoursesService', () => {
     });
 
     it('should use default page 1 and limit 10 when parameters are omitted', async () => {
-      await service.findAll({}, studentUser);
+      await service.findAll({}, instructorUser);
 
       expect(mockQueryBuilder.skip).toHaveBeenCalledWith(0);
       expect(mockQueryBuilder.take).toHaveBeenCalledWith(10);
@@ -151,13 +139,13 @@ describe('CoursesService', () => {
 
     it('should reject invalid page parameter (< 1)', async () => {
       await expect(
-        service.findAll({ page: 0, limit: 10 }, studentUser),
+        service.findAll({ page: 0, limit: 10 }, instructorUser),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('should reject invalid limit parameter (< 1)', async () => {
       await expect(
-        service.findAll({ page: 1, limit: -5 }, studentUser),
+        service.findAll({ page: 1, limit: -5 }, instructorUser),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -167,21 +155,12 @@ describe('CoursesService', () => {
       expect(mockQueryBuilder.take).toHaveBeenCalledWith(100);
     });
 
-    it('should restrict student visibility to published courses only', async () => {
-      await service.findAll({ page: 1, limit: 10 }, studentUser);
-
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'course.isPublished = :isPublished',
-        { isPublished: true },
-      );
-    });
-
-    it('should allow instructors to see published courses and their own drafts', async () => {
+    it('should limit instructors to their own courses', async () => {
       await service.findAll({ page: 1, limit: 10 }, instructorUser);
 
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        '(course.isPublished = :isPublished OR course.instructorId = :instructorId)',
-        { isPublished: true, instructorId: instructorUser.sub },
+        'course.instructorId = :instructorId',
+        { instructorId: instructorUser.sub },
       );
     });
 
@@ -193,65 +172,19 @@ describe('CoursesService', () => {
   });
 
   describe('Course Retrieval by ID', () => {
-    const publishedCourse = {
-      id: 'course-1',
-      title: 'Published Course',
-      isPublished: true,
-      instructorId: instructorUser.sub,
-      sections: [],
-    };
+    it('should return the course', async () => {
+      const course = { id: 'course-1', isPublished: false };
+      mockCoursesRepo.findOne.mockResolvedValue(course);
 
-    const unpublishedCourse = {
-      id: 'course-2',
-      title: 'Draft Course',
-      isPublished: false,
-      instructorId: instructorUser.sub,
-      sections: [],
-    };
-
-    it('should return published course for students', async () => {
-      mockCoursesRepo.findOne.mockResolvedValue(publishedCourse);
-
-      const result = await service.findById('course-1', studentUser);
-      expect(result).toEqual(publishedCourse);
-    });
-
-    it('should throw NotFoundException for students when course is unpublished', async () => {
-      mockCoursesRepo.findOne.mockResolvedValue(unpublishedCourse);
-
-      await expect(service.findById('course-2', studentUser)).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('should return unpublished course for the owning instructor', async () => {
-      mockCoursesRepo.findOne.mockResolvedValue(unpublishedCourse);
-
-      const result = await service.findById('course-2', instructorUser);
-      expect(result).toEqual(unpublishedCourse);
-    });
-
-    it('should throw NotFoundException for another instructor when course is unpublished', async () => {
-      mockCoursesRepo.findOne.mockResolvedValue(unpublishedCourse);
-
-      await expect(
-        service.findById('course-2', otherInstructorUser),
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it('should return unpublished course for an admin', async () => {
-      mockCoursesRepo.findOne.mockResolvedValue(unpublishedCourse);
-
-      const result = await service.findById('course-2', adminUser);
-      expect(result).toEqual(unpublishedCourse);
+      await expect(service.findById('course-1')).resolves.toEqual(course);
     });
 
     it('should throw NotFoundException when course ID does not exist', async () => {
       mockCoursesRepo.findOne.mockResolvedValue(null);
 
-      await expect(
-        service.findById('non-existent-id', studentUser),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.findById('non-existent-id')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

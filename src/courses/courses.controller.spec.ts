@@ -88,17 +88,14 @@ describe('CoursesController', () => {
     expect(result).toEqual([]);
   });
 
-  it('should get course details for the current user', async () => {
+  it('should get course details through service', async () => {
     const course = { id: 'c-1', isPublished: false };
 
     mockCoursesService.findById.mockResolvedValue(course);
 
-    const result = await controller.findOne('c-1', mockInstructorReq);
+    const result = await controller.findOne('c-1');
 
-    expect(mockCoursesService.findById).toHaveBeenCalledWith(
-      'c-1',
-      mockInstructorReq.user,
-    );
+    expect(mockCoursesService.findById).toHaveBeenCalledWith('c-1');
     expect(result).toEqual(course);
   });
 
