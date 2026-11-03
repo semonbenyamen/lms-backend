@@ -12,6 +12,7 @@ import { isUniqueViolation } from '../common/database/is-unique-violation.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
 import { getPaginationParams } from '../common/pagintion/pagination.util.js';
+import { CoursesService } from '../courses/courses.service.js';
 import { Course } from '../courses/entities/course.entity.js';
 import { CreateSectionDto } from './dto/create-section.dto.js';
 import { UpdateSectionDto } from './dto/update-section.dto.js';
@@ -22,8 +23,7 @@ export class SectionsService {
   constructor(
     @InjectRepository(Section)
     private readonly sectionsRepository: Repository<Section>,
-    @InjectRepository(Course)
-    private readonly coursesRepository: Repository<Course>,
+    private readonly coursesService: CoursesService,
   ) {}
 
   async create(
@@ -31,13 +31,7 @@ export class SectionsService {
     dto: CreateSectionDto,
     user: JwtPayload,
   ): Promise<Section> {
-    const course = await this.coursesRepository.findOne({
-      where: { id: courseId },
-    });
-
-    if (!course) {
-      throw new NotFoundException(`Course with ID ${courseId} not found`);
-    }
+    const course = await this.coursesService.findById(courseId);
 
     assertOwnershipOrAdmin(
       user.role,
@@ -55,7 +49,7 @@ export class SectionsService {
     return this.saveSection(section);
   }
 
-  async findById(id: string, user?: JwtPayload): Promise<Section> {
+  async findById(id: string, user: JwtPayload): Promise<Section> {
     const section = await this.sectionsRepository.findOne({
       where: { id },
       relations: {
@@ -63,20 +57,8 @@ export class SectionsService {
       },
     });
 
-    if (!section || !section.course) {
-      throw new NotFoundException(`Section with ID ${id} not found`);
-    }
-
-    if (user) {
-      const isOwner =
-        user.role === UserRole.INSTRUCTOR &&
-        section.course.instructorId === user.sub;
-      const isAdmin = user.role === UserRole.ADMIN;
-
-      if (!section.course.isPublished && !isOwner && !isAdmin) {
-        throw new NotFoundException(`Section with ID ${id} not found`);
-      }
-    } else if (!section.course.isPublished) {
+    // The course is empty when it was soft deleted, because the join skips deleted rows.
+    if (!section || !section.course || !this.canRead(section.course, user)) {
       throw new NotFoundException(`Section with ID ${id} not found`);
     }
 
@@ -85,26 +67,12 @@ export class SectionsService {
 
   async findByCourse(
     courseId: string,
-    user?: JwtPayload,
+    user: JwtPayload,
     paginationQuery?: PaginationQueryDto,
   ): Promise<Section[]> {
-    const course = await this.coursesRepository.findOne({
-      where: { id: courseId },
-    });
+    const course = await this.coursesService.findById(courseId);
 
-    if (!course) {
-      throw new NotFoundException(`Course with ID ${courseId} not found`);
-    }
-
-    if (user) {
-      const isOwner =
-        user.role === UserRole.INSTRUCTOR && course.instructorId === user.sub;
-      const isAdmin = user.role === UserRole.ADMIN;
-
-      if (!course.isPublished && !isOwner && !isAdmin) {
-        throw new NotFoundException(`Course with ID ${courseId} not found`);
-      }
-    } else if (!course.isPublished) {
+    if (!this.canRead(course, user)) {
       throw new NotFoundException(`Course with ID ${courseId} not found`);
     }
 
@@ -162,6 +130,14 @@ export class SectionsService {
     await this.sectionsRepository.softRemove(section);
   }
 
+  private canRead(course: Course, user: JwtPayload): boolean {
+    return (
+      course.isPublished ||
+      user.role === UserRole.ADMIN ||
+      (user.role === UserRole.INSTRUCTOR && course.instructorId === user.sub)
+    );
+  }
+
   // order_index is unique per course, so a clash is a 409, not a 500.
   private async saveSection(section: Section): Promise<Section> {
     try {
@@ -182,6 +158,7 @@ export class SectionsService {
       relations: { course: true },
     });
 
+    // The course is empty when it was soft deleted, because the join skips deleted rows.
     if (!section || !section.course) {
       throw new NotFoundException(`Section with ID ${id} not found`);
     }
