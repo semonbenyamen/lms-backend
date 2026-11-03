@@ -5,13 +5,14 @@ import { AuthToken } from '../auth/entities/auth-token.entity.js';
 import { RefreshToken } from '../auth/entities/refresh-token.entity.js';
 import { Course } from '../courses/entities/course.entity.js';
 import { Section } from '../sections/entities/section.entity.js';
+import { Category } from '../categories/entities/category.entity.js';
 import { Lesson } from '../lessons/entities/lesson.entity.js';
 
 export const AppDataSource = new DataSource({
   type: 'postgres',
   url: process.env.DATABASE_URL,
 
-  entities: [User, AuthToken, RefreshToken, Course, Section, Lesson],
+  entities: [User, AuthToken, RefreshToken, Course, Category, Section, Lesson],
 
   migrations: ['src/database/migrations/*.ts'],
 

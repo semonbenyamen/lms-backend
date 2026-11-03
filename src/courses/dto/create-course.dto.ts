@@ -8,11 +8,13 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   Min,
 } from 'class-validator';
 
 import { CourseDifficulty } from '../../common/enums/course-difficulty.enum.js';
+import { CourseLanguage } from '../../common/enums/course-language.enum.js';
 
 export class CreateCourseDto {
   @ApiProperty({
@@ -40,15 +42,11 @@ export class CreateCourseDto {
   description: string;
 
   @ApiProperty({
-    example: 'Backend Development',
-    description: 'The category of the course',
-    maxLength: 100,
+    example: '550e8400-e29b-41d4-a716-446655440010',
+    description: 'One of the categories from GET /categories',
   })
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
-  @IsString()
-  @IsNotEmpty({ message: 'Category must not be empty' })
-  @MaxLength(100)
-  category: string;
+  @IsUUID()
+  categoryId: string;
 
   @ApiProperty({
     example: ['NestJS', 'TypeORM', 'PostgreSQL', 'Architecture'],
@@ -70,15 +68,14 @@ export class CreateCourseDto {
   difficulty?: CourseDifficulty;
 
   @ApiPropertyOptional({
-    example: 'en',
+    enum: CourseLanguage,
+    example: CourseLanguage.ENGLISH,
     description: 'Language of instruction',
-    default: 'en',
-    maxLength: 50,
+    default: CourseLanguage.ENGLISH,
   })
   @IsOptional()
-  @IsString()
-  @MaxLength(50)
-  language?: string;
+  @IsEnum(CourseLanguage)
+  language?: CourseLanguage;
 
   @ApiPropertyOptional({
     example: ['Basic TypeScript', 'Node.js fundamentals'],

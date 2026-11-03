@@ -1,4 +1,3 @@
-
 import {
   Column,
   CreateDateColumn,
@@ -13,7 +12,9 @@ import {
 } from 'typeorm';
 import type { Relation } from 'typeorm';
 
+import { Category } from '../../categories/entities/category.entity.js';
 import { CourseDifficulty } from '../../common/enums/course-difficulty.enum.js';
+import { CourseLanguage } from '../../common/enums/course-language.enum.js';
 import { User } from '../../users/entities/user.entity.js';
 import { Section } from '../../sections/entities/section.entity.js';
 
@@ -28,8 +29,16 @@ export class Course {
   @Column({ type: 'text' })
   description: string;
 
-  @Column({ length: 100 })
-  category: string;
+  @Index('IDX_courses_category_id')
+  @Column({ name: 'category_id', type: 'uuid' })
+  categoryId: string;
+
+  @ManyToOne(() => Category, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'category_id',
+    foreignKeyConstraintName: 'FK_courses_category_id',
+  })
+  category: Relation<Category>;
 
   @Column('text', { array: true, default: '{}' })
   topics: string[];
@@ -37,8 +46,12 @@ export class Course {
   @Column({ type: 'enum', enum: CourseDifficulty, nullable: true })
   difficulty: CourseDifficulty | null;
 
-  @Column({ type: 'varchar', length: 50, default: 'en' })
-  language: string;
+  @Column({
+    type: 'enum',
+    enum: CourseLanguage,
+    default: CourseLanguage.ENGLISH,
+  })
+  language: CourseLanguage;
 
   @Column('text', { array: true, nullable: true })
   prerequisites: string[] | null;

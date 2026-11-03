@@ -14,6 +14,7 @@ import { HealthModule } from './health/health.module.js';
 import { UsersModule } from './users/users.module.js';
 import { CoursesModule } from './courses/courses.module.js';
 import { SectionsModule } from './sections/sections.module.js';
+import { CategoriesModule } from './categories/categories.module.js';
 import { LessonsModule } from './lessons/lessons.module.js';
 
 @Module({
@@ -46,6 +47,7 @@ import { LessonsModule } from './lessons/lessons.module.js';
     AuthModule,
     CoursesModule,
     SectionsModule,
+    CategoriesModule,
     LessonsModule,
   ],
 

@@ -14,9 +14,27 @@ describe('Course DTO Validation', () => {
   const validCourse = {
     title: 'NestJS Backend Architecture',
     description: 'Learn NestJS backend development',
-    category: 'Backend Development',
+    categoryId: '550e8400-e29b-41d4-a716-446655440010',
     topics: ['NestJS', 'TypeScript'],
   };
+
+  it('should reject a category that is not an id', async () => {
+    await expect(
+      validationPipe.transform(
+        { ...validCourse, categoryId: 'Backend Development' },
+        { type: 'body', metatype: CreateCourseDto },
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('should reject a language outside the supported list', async () => {
+    await expect(
+      validationPipe.transform(
+        { ...validCourse, language: 'english' },
+        { type: 'body', metatype: CreateCourseDto },
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
 
   it('should accept valid course creation data', async () => {
     const result = await validationPipe.transform(validCourse, {
