@@ -4,16 +4,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindManyOptions, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
-import { assertOwnershipOrAdmin } from '../common/authorization/authorization.util.js';
+import {
+  assertOwnershipOrAdmin,
+  canReadCourse,
+} from '../common/authorization/authorization.util.js';
 import { isUniqueViolation } from '../common/database/is-unique-violation.js';
-import { UserRole } from '../common/enums/user-role.enum.js';
 import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
 import { getPaginationParams } from '../common/pagintion/pagination.util.js';
 import { CoursesService } from '../courses/courses.service.js';
-import { Course } from '../courses/entities/course.entity.js';
 import { CreateSectionDto } from './dto/create-section.dto.js';
 import { UpdateSectionDto } from './dto/update-section.dto.js';
 import { Section } from './entities/section.entity.js';
@@ -58,7 +59,7 @@ export class SectionsService {
     });
 
     // The course is empty when it was soft deleted, because the join skips deleted rows.
-    if (!section || !section.course || !this.canRead(section.course, user)) {
+    if (!section || !section.course || !canReadCourse(section.course, user)) {
       throw new NotFoundException(`Section with ID ${id} not found`);
     }
 
@@ -68,31 +69,24 @@ export class SectionsService {
   async findByCourse(
     courseId: string,
     user: JwtPayload,
-    paginationQuery?: PaginationQueryDto,
+    paginationQuery: PaginationQueryDto,
   ): Promise<Section[]> {
     const course = await this.coursesService.findById(courseId);
 
-    if (!this.canRead(course, user)) {
+    if (!canReadCourse(course, user)) {
       throw new NotFoundException(`Course with ID ${courseId} not found`);
     }
 
-    const findOptions: FindManyOptions<Section> = {
+    const { skip, take } = getPaginationParams(paginationQuery);
+
+    return this.sectionsRepository.find({
       where: { courseId },
       order: {
         orderIndex: 'ASC',
       },
-    };
-
-    if (
-      paginationQuery?.page !== undefined ||
-      paginationQuery?.limit !== undefined
-    ) {
-      const { skip, take } = getPaginationParams(paginationQuery);
-      findOptions.skip = skip;
-      findOptions.take = take;
-    }
-
-    return this.sectionsRepository.find(findOptions);
+      skip,
+      take,
+    });
   }
 
   async update(
@@ -130,14 +124,6 @@ export class SectionsService {
     await this.sectionsRepository.softRemove(section);
   }
 
-  private canRead(course: Course, user: JwtPayload): boolean {
-    return (
-      course.isPublished ||
-      user.role === UserRole.ADMIN ||
-      (user.role === UserRole.INSTRUCTOR && course.instructorId === user.sub)
-    );
-  }
-
   // order_index is unique per course, so a clash is a 409, not a 500.
   private async saveSection(section: Section): Promise<Section> {
     try {
@@ -152,7 +138,7 @@ export class SectionsService {
     }
   }
 
-  private async findSectionWithCourse(id: string): Promise<Section> {
+  async findSectionWithCourse(id: string): Promise<Section> {
     const section = await this.sectionsRepository.findOne({
       where: { id },
       relations: { course: true },

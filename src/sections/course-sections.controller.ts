@@ -88,7 +88,7 @@ export class CourseSectionsController {
   findByCourse(
     @Param('courseId', new ParseUUIDPipe()) courseId: string,
     @Req() request: AuthenticatedRequest,
-    @Query() paginationQuery?: PaginationQueryDto,
+    @Query() paginationQuery: PaginationQueryDto,
   ) {
     return this.sectionsService.findByCourse(
       courseId,

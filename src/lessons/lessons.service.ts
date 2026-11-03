@@ -4,15 +4,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindManyOptions, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
-import { assertOwnershipOrAdmin } from '../common/authorization/authorization.util.js';
+import {
+  assertOwnershipOrAdmin,
+  canReadCourse,
+} from '../common/authorization/authorization.util.js';
 import { isUniqueViolation } from '../common/database/is-unique-violation.js';
-import { UserRole } from '../common/enums/user-role.enum.js';
 import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
 import { getPaginationParams } from '../common/pagintion/pagination.util.js';
-import { Section } from '../sections/entities/section.entity.js';
+import { SectionsService } from '../sections/sections.service.js';
 import { CreateLessonDto } from './dto/create-lesson.dto.js';
 import { UpdateLessonDto } from './dto/update-lesson.dto.js';
 import { Lesson } from './entities/lesson.entity.js';
@@ -22,23 +24,15 @@ export class LessonsService {
   constructor(
     @InjectRepository(Lesson)
     private readonly lessonsRepository: Repository<Lesson>,
-    @InjectRepository(Section)
-    private readonly sectionsRepository: Repository<Section>,
+    private readonly sectionsService: SectionsService,
   ) {}
 
   async create(
     sectionId: string,
     dto: CreateLessonDto,
-    user: JwtPayload,
+    user: Pick<JwtPayload, 'sub' | 'role'>,
   ): Promise<Lesson> {
-    const section = await this.sectionsRepository.findOne({
-      where: { id: sectionId },
-      relations: { course: true },
-    });
-
-    if (!section || !section.course) {
-      throw new NotFoundException(`Section with ID ${sectionId} not found`);
-    }
+    const section = await this.sectionsService.findSectionWithCourse(sectionId);
 
     assertOwnershipOrAdmin(
       user.role,
@@ -59,32 +53,14 @@ export class LessonsService {
     return this.saveLesson(lesson);
   }
 
-  async findById(id: string, user?: JwtPayload): Promise<Lesson> {
-    const lesson = await this.lessonsRepository.findOne({
-      where: { id },
-      relations: {
-        section: {
-          course: true,
-        },
-      },
-    });
+  async findById(
+    lessonId: string,
+    user: Pick<JwtPayload, 'sub' | 'role'>,
+  ): Promise<Lesson> {
+    const lesson = await this.findLessonWithCourse(lessonId);
 
-    if (!lesson || !lesson.section || !lesson.section.course) {
-      throw new NotFoundException(`Lesson with ID ${id} not found`);
-    }
-
-    // Publication visibility
-    if (user) {
-      const isOwner =
-        user.role === UserRole.INSTRUCTOR &&
-        lesson.section.course.instructorId === user.sub;
-      const isAdmin = user.role === UserRole.ADMIN;
-
-      if (!lesson.section.course.isPublished && !isOwner && !isAdmin) {
-        throw new NotFoundException(`Lesson with ID ${id} not found`);
-      }
-    } else if (!lesson.section.course.isPublished) {
-      throw new NotFoundException(`Lesson with ID ${id} not found`);
+    if (!canReadCourse(lesson.section.course, user)) {
+      throw new NotFoundException(`Lesson with ID ${lessonId} not found`);
     }
 
     return lesson;
@@ -92,56 +68,33 @@ export class LessonsService {
 
   async findBySection(
     sectionId: string,
-    user?: JwtPayload,
-    paginationQuery?: PaginationQueryDto,
+    user: Pick<JwtPayload, 'sub' | 'role'>,
+    paginationQuery: PaginationQueryDto,
   ): Promise<Lesson[]> {
-    const section = await this.sectionsRepository.findOne({
-      where: { id: sectionId },
-      relations: { course: true },
-    });
+    const section = await this.sectionsService.findSectionWithCourse(sectionId);
 
-    if (!section || !section.course) {
+    if (!canReadCourse(section.course, user)) {
       throw new NotFoundException(`Section with ID ${sectionId} not found`);
     }
 
-    if (user) {
-      const isOwner =
-        user.role === UserRole.INSTRUCTOR &&
-        section.course.instructorId === user.sub;
-      const isAdmin = user.role === UserRole.ADMIN;
+    const { skip, take } = getPaginationParams(paginationQuery);
 
-      if (!section.course.isPublished && !isOwner && !isAdmin) {
-        throw new NotFoundException(`Section with ID ${sectionId} not found`);
-      }
-    } else if (!section.course.isPublished) {
-      throw new NotFoundException(`Section with ID ${sectionId} not found`);
-    }
-
-    const findOptions: FindManyOptions<Lesson> = {
+    return this.lessonsRepository.find({
       where: { sectionId },
       order: {
         orderIndex: 'ASC',
       },
-    };
-
-    if (
-      paginationQuery?.page !== undefined ||
-      paginationQuery?.limit !== undefined
-    ) {
-      const { skip, take } = getPaginationParams(paginationQuery);
-      findOptions.skip = skip;
-      findOptions.take = take;
-    }
-
-    return this.lessonsRepository.find(findOptions);
+      skip,
+      take,
+    });
   }
 
   async update(
-    id: string,
+    lessonId: string,
     dto: UpdateLessonDto,
-    user: JwtPayload,
+    user: Pick<JwtPayload, 'sub' | 'role'>,
   ): Promise<Lesson> {
-    const lesson = await this.findLessonWithCourse(id);
+    const lesson = await this.findLessonWithCourse(lessonId);
     assertOwnershipOrAdmin(
       user.role,
       user.sub,
@@ -168,8 +121,11 @@ export class LessonsService {
     return this.saveLesson(lesson);
   }
 
-  async remove(id: string, user: JwtPayload): Promise<void> {
-    const lesson = await this.findLessonWithCourse(id);
+  async remove(
+    lessonId: string,
+    user: Pick<JwtPayload, 'sub' | 'role'>,
+  ): Promise<void> {
+    const lesson = await this.findLessonWithCourse(lessonId);
     assertOwnershipOrAdmin(
       user.role,
       user.sub,
@@ -196,14 +152,15 @@ export class LessonsService {
     }
   }
 
-  private async findLessonWithCourse(id: string): Promise<Lesson> {
+  private async findLessonWithCourse(lessonId: string): Promise<Lesson> {
     const lesson = await this.lessonsRepository.findOne({
-      where: { id },
+      where: { id: lessonId },
       relations: { section: { course: true } },
     });
 
+    // The joins come back empty when the section or the course was soft deleted.
     if (!lesson || !lesson.section || !lesson.section.course) {
-      throw new NotFoundException(`Lesson with ID ${id} not found`);
+      throw new NotFoundException(`Lesson with ID ${lessonId} not found`);
     }
 
     return lesson;

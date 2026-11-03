@@ -87,12 +87,13 @@ describe('LessonsController', () => {
     const result = await sectionLessonsController.findBySection(
       'section-1',
       mockReq,
+      {},
     );
 
     expect(mockLessonsService.findBySection).toHaveBeenCalledWith(
       'section-1',
       mockReq.user,
-      undefined,
+      {},
     );
     expect(result).toEqual([]);
   });

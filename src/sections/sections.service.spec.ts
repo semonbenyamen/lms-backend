@@ -206,15 +206,26 @@ describe('SectionsService', () => {
       mockSectionsRepo.find.mockResolvedValue([]);
 
       await expect(
-        service.findByCourse('c-1', instructorUser),
+        service.findByCourse('c-1', instructorUser, {}),
       ).resolves.toEqual([]);
     });
 
     it('should throw NotFoundException to student for a draft course', async () => {
       mockCoursesService.findById.mockResolvedValue(draftCourse);
 
-      await expect(service.findByCourse('c-1', studentUser)).rejects.toThrow(
-        NotFoundException,
+      await expect(
+        service.findByCourse('c-1', studentUser, {}),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should use the default page and limit', async () => {
+      mockCoursesService.findById.mockResolvedValue(draftCourse);
+      mockSectionsRepo.find.mockResolvedValue([]);
+
+      await service.findByCourse('c-1', instructorUser, {});
+
+      expect(mockSectionsRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 0, take: 10 }),
       );
     });
   });

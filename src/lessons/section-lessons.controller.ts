@@ -88,7 +88,7 @@ export class SectionLessonsController {
   findBySection(
     @Param('sectionId', new ParseUUIDPipe()) sectionId: string,
     @Req() request: AuthenticatedRequest,
-    @Query() paginationQuery?: PaginationQueryDto,
+    @Query() paginationQuery: PaginationQueryDto,
   ) {
     return this.lessonsService.findBySection(
       sectionId,

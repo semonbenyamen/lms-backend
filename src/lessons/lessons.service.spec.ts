@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { CourseDifficulty } from '../common/enums/course-difficulty.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
-import { Section } from '../sections/entities/section.entity.js';
+import { SectionsService } from '../sections/sections.service.js';
 import { Lesson } from './entities/lesson.entity.js';
 import { LessonsService } from './lessons.service.js';
 
@@ -26,8 +26,8 @@ describe('LessonsService', () => {
     softRemove: vi.fn(),
   };
 
-  const mockSectionsRepo = {
-    findOne: vi.fn(),
+  const mockSectionsService = {
+    findSectionWithCourse: vi.fn(),
   };
 
   const instructorUser: JwtPayload = {
@@ -65,8 +65,8 @@ describe('LessonsService', () => {
           useValue: mockLessonsRepo,
         },
         {
-          provide: getRepositoryToken(Section),
-          useValue: mockSectionsRepo,
+          provide: SectionsService,
+          useValue: mockSectionsService,
         },
       ],
     }).compile();
@@ -88,7 +88,7 @@ describe('LessonsService', () => {
     };
 
     it('should allow course owner instructor to create a lesson', async () => {
-      mockSectionsRepo.findOne.mockResolvedValue(section);
+      mockSectionsService.findSectionWithCourse.mockResolvedValue(section);
       const createdLesson = { id: 'l-1', sectionId: 'section-1', ...createDto };
       mockLessonsRepo.create.mockReturnValue(createdLesson);
       mockLessonsRepo.save.mockResolvedValue(createdLesson);
@@ -105,7 +105,7 @@ describe('LessonsService', () => {
     });
 
     it('should allow admin to create a lesson', async () => {
-      mockSectionsRepo.findOne.mockResolvedValue(section);
+      mockSectionsService.findSectionWithCourse.mockResolvedValue(section);
       const createdLesson = { id: 'l-1', sectionId: 'section-1', ...createDto };
       mockLessonsRepo.create.mockReturnValue(createdLesson);
       mockLessonsRepo.save.mockResolvedValue(createdLesson);
@@ -115,7 +115,7 @@ describe('LessonsService', () => {
     });
 
     it('should forbid non-owner instructor from creating a lesson', async () => {
-      mockSectionsRepo.findOne.mockResolvedValue(section);
+      mockSectionsService.findSectionWithCourse.mockResolvedValue(section);
 
       await expect(
         service.create('section-1', createDto, otherInstructorUser),
@@ -123,7 +123,9 @@ describe('LessonsService', () => {
     });
 
     it('should throw NotFoundException if section is not found', async () => {
-      mockSectionsRepo.findOne.mockResolvedValue(null);
+      mockSectionsService.findSectionWithCourse.mockRejectedValue(
+        new NotFoundException(),
+      );
 
       await expect(
         service.create('nonexistent-section', createDto, instructorUser),
@@ -131,7 +133,7 @@ describe('LessonsService', () => {
     });
 
     it('should throw ConflictException if the orderIndex is taken', async () => {
-      mockSectionsRepo.findOne.mockResolvedValue(section);
+      mockSectionsService.findSectionWithCourse.mockResolvedValue(section);
       mockLessonsRepo.create.mockReturnValue({ sectionId: 'section-1', ...createDto });
       mockLessonsRepo.save.mockRejectedValue(
         new QueryFailedError(
@@ -202,6 +204,25 @@ describe('LessonsService', () => {
         NotFoundException,
       );
     });
+
+    it('should throw NotFoundException for other instructor when course is unpublished', async () => {
+      mockLessonsRepo.findOne.mockResolvedValue(unpublishedLesson);
+
+      await expect(
+        service.findById('lesson-2', otherInstructorUser),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException when the course was soft deleted', async () => {
+      mockLessonsRepo.findOne.mockResolvedValue({
+        ...publishedLesson,
+        section: { course: null },
+      });
+
+      await expect(service.findById('lesson-1', adminUser)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
   });
 
   describe('findBySection', () => {
@@ -211,14 +232,40 @@ describe('LessonsService', () => {
     };
 
     it('should return lessons for a section', async () => {
-      mockSectionsRepo.findOne.mockResolvedValue(section);
+      mockSectionsService.findSectionWithCourse.mockResolvedValue(section);
       mockLessonsRepo.find.mockResolvedValue([]);
 
-      const result = await service.findBySection('section-1', instructorUser);
+      const result = await service.findBySection(
+        'section-1',
+        instructorUser,
+        {},
+      );
       expect(mockLessonsRepo.find).toHaveBeenCalledWith(
         expect.objectContaining({ where: { sectionId: 'section-1' } }),
       );
       expect(result).toEqual([]);
+    });
+
+    it('should use the default page and limit', async () => {
+      mockSectionsService.findSectionWithCourse.mockResolvedValue(section);
+      mockLessonsRepo.find.mockResolvedValue([]);
+
+      await service.findBySection('section-1', studentUser, {});
+
+      expect(mockLessonsRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 0, take: 10 }),
+      );
+    });
+
+    it('should throw NotFoundException to student for an unpublished course', async () => {
+      mockSectionsService.findSectionWithCourse.mockResolvedValue({
+        ...section,
+        course: { ...section.course, isPublished: false },
+      });
+
+      await expect(
+        service.findBySection('section-1', studentUser, {}),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
