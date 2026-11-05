@@ -30,6 +30,14 @@ describe('CoursesService', () => {
     assertExists: vi.fn(),
   };
 
+  // Loads the course with its category after a create, read or update.
+  const courseQueryBuilder = {
+    leftJoin: vi.fn().mockReturnThis(),
+    addSelect: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    getOne: vi.fn(),
+  };
+
   const instructorId = 'instructor-uuid-1';
 
   const instructorUser: JwtPayload = {
@@ -46,6 +54,10 @@ describe('CoursesService', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockCoursesRepo.createQueryBuilder.mockReturnValue(courseQueryBuilder);
+    courseQueryBuilder.getOne.mockImplementation(
+      () => mockCoursesRepo.save.mock.results.at(-1)?.value,
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -95,6 +107,9 @@ describe('CoursesService', () => {
         instructorId,
       });
       expect(mockCoursesRepo.save).toHaveBeenCalledWith(mockCourse);
+      expect(courseQueryBuilder.where).toHaveBeenCalledWith('course.id = :id', {
+        id: 'course-1',
+      });
       expect(result).toEqual(mockCourse);
     });
 
@@ -112,6 +127,8 @@ describe('CoursesService', () => {
 
   describe('Course Pagination and Visibility', () => {
     let mockQueryBuilder: {
+      leftJoin: ReturnType<typeof vi.fn>;
+      addSelect: ReturnType<typeof vi.fn>;
       orderBy: ReturnType<typeof vi.fn>;
       skip: ReturnType<typeof vi.fn>;
       take: ReturnType<typeof vi.fn>;
@@ -121,6 +138,8 @@ describe('CoursesService', () => {
 
     beforeEach(() => {
       mockQueryBuilder = {
+        leftJoin: vi.fn().mockReturnThis(),
+        addSelect: vi.fn().mockReturnThis(),
         orderBy: vi.fn().mockReturnThis(),
         skip: vi.fn().mockReturnThis(),
         take: vi.fn().mockReturnThis(),
@@ -161,6 +180,19 @@ describe('CoursesService', () => {
       });
     });
 
+    it('should load only the id and name of the category', async () => {
+      await service.findAll({}, instructorUser);
+
+      expect(mockQueryBuilder.leftJoin).toHaveBeenCalledWith(
+        'course.category',
+        'category',
+      );
+      expect(mockQueryBuilder.addSelect).toHaveBeenCalledWith([
+        'category.id',
+        'category.name',
+      ]);
+    });
+
     it('should limit instructors to their own courses', async () => {
       await service.findAll({ page: 1, limit: 10 }, instructorUser);
 
@@ -180,13 +212,13 @@ describe('CoursesService', () => {
   describe('Course Retrieval by ID', () => {
     it('should return the course', async () => {
       const course = { id: 'course-1', isPublished: false };
-      mockCoursesRepo.findOne.mockResolvedValue(course);
+      courseQueryBuilder.getOne.mockResolvedValueOnce(course);
 
       await expect(service.findById('course-1')).resolves.toEqual(course);
     });
 
     it('should throw NotFoundException when course ID does not exist', async () => {
-      mockCoursesRepo.findOne.mockResolvedValue(null);
+      courseQueryBuilder.getOne.mockResolvedValueOnce(null);
 
       await expect(service.findById('non-existent-id')).rejects.toThrow(
         NotFoundException,

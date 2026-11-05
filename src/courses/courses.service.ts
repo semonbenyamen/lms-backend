@@ -35,7 +35,9 @@ export class CoursesService {
       instructorId,
     });
 
-    return this.coursesRepository.save(course);
+    const { id } = await this.coursesRepository.save(course);
+
+    return this.findById(id);
   }
 
   async findAll(
@@ -44,8 +46,7 @@ export class CoursesService {
   ): Promise<PaginatedResult<Course>> {
     const { page, limit, skip, take } = getPaginationParams(paginationQuery);
 
-    const queryBuilder = this.coursesRepository
-      .createQueryBuilder('course')
+    const queryBuilder = this.courseWithCategoryQuery()
       .orderBy('course.createdAt', 'DESC')
       .skip(skip)
       .take(take);
@@ -65,7 +66,15 @@ export class CoursesService {
 
   // Ownership is verified by CourseOwnershipGuard before this runs.
   async findById(id: string): Promise<Course> {
-    return this.findCourseEntity(id);
+    const course = await this.courseWithCategoryQuery()
+      .where('course.id = :id', { id })
+      .getOne();
+
+    if (!course) {
+      throw new NotFoundException(`Course with ID ${id} not found`);
+    }
+
+    return course;
   }
 
   // Ownership is verified by CourseOwnershipGuard before this runs.
@@ -77,9 +86,11 @@ export class CoursesService {
     }
 
     // Apply only the fields provided in the update request.
-    return this.coursesRepository.save(
+    await this.coursesRepository.save(
       this.coursesRepository.merge(course, updateCourseDto),
     );
+
+    return this.findById(id);
   }
 
   // Ownership is verified by CourseOwnershipGuard before this runs.
@@ -91,6 +102,14 @@ export class CoursesService {
   }
 
   // --- Helper Methods ---
+
+  // Categories are paginated, so a course brings the name it needs with it.
+  private courseWithCategoryQuery() {
+    return this.coursesRepository
+      .createQueryBuilder('course')
+      .leftJoin('course.category', 'category')
+      .addSelect(['category.id', 'category.name']);
+  }
 
   private async findCourseEntity(id: string): Promise<Course> {
     const course = await this.coursesRepository.findOne({
