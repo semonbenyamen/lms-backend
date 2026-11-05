@@ -34,7 +34,7 @@ import { UpdateCourseDto } from './dto/update-course.dto.js';
 import { CourseOwnershipGuard } from './guards/course-ownership.guard.js';
 
 @ApiTags('Courses')
-@Controller('courses')
+@Controller('dashboard/courses')
 export class CoursesController {
   constructor(private readonly coursesService: CoursesService) {}
 
@@ -69,7 +69,7 @@ export class CoursesController {
     return this.coursesService.create(createCourseDto, request.user.sub);
   }
 
-  @Get('manage')
+  @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiBearerAuth()
@@ -96,7 +96,7 @@ export class CoursesController {
     return this.coursesService.findAll(paginationQuery, request.user);
   }
 
-  @Get('manage/:id')
+  @Get(':id')
   // Authenticate the user, check their role, then verify course ownership.
   @UseGuards(JwtAuthGuard, RolesGuard, CourseOwnershipGuard)
   @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
