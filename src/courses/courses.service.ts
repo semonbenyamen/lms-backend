@@ -6,7 +6,11 @@ import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { CategoriesService } from '../categories/categories.service.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
-import { getPaginationParams } from '../common/pagintion/pagination.util.js';
+import {
+  getPaginationMeta,
+  getPaginationParams,
+  PaginatedResult,
+} from '../common/pagintion/pagination.util.js';
 import { CreateCourseDto } from './dto/create-course.dto.js';
 import { UpdateCourseDto } from './dto/update-course.dto.js';
 import { Course } from './entities/course.entity.js';
@@ -31,17 +35,18 @@ export class CoursesService {
       instructorId,
     });
 
-    return this.coursesRepository.save(course);
+    const { id } = await this.coursesRepository.save(course);
+
+    return this.findById(id);
   }
 
   async findAll(
     paginationQuery: PaginationQueryDto,
     user: Pick<JwtPayload, 'sub' | 'role'>,
-  ): Promise<Course[]> {
-    const { skip, take } = getPaginationParams(paginationQuery);
+  ): Promise<PaginatedResult<Course>> {
+    const { page, limit, skip, take } = getPaginationParams(paginationQuery);
 
-    const queryBuilder = this.coursesRepository
-      .createQueryBuilder('course')
+    const queryBuilder = this.courseWithCategoryQuery()
       .orderBy('course.createdAt', 'DESC')
       .skip(skip)
       .take(take);
@@ -54,26 +59,38 @@ export class CoursesService {
     }
 
     // TypeORM excludes soft-deleted courses from normal queries.
-    return queryBuilder.getMany();
+    const [items, total] = await queryBuilder.getManyAndCount();
+
+    return { items, meta: getPaginationMeta(total, page, limit) };
   }
 
   // Ownership is verified by CourseOwnershipGuard before this runs.
   async findById(id: string): Promise<Course> {
-    return this.findCourseEntity(id);
+    const course = await this.courseWithCategoryQuery()
+      .where('course.id = :id', { id })
+      .getOne();
+
+    if (!course) {
+      throw new NotFoundException(`Course with ID ${id} not found`);
+    }
+
+    return course;
   }
 
   // Ownership is verified by CourseOwnershipGuard before this runs.
   async update(id: string, updateCourseDto: UpdateCourseDto): Promise<Course> {
     const course = await this.findCourseEntity(id);
 
-    if (updateCourseDto.categoryId !== undefined) {
+    if (updateCourseDto.categoryId) {
       await this.categoriesService.assertExists(updateCourseDto.categoryId);
     }
 
     // Apply only the fields provided in the update request.
-    return this.coursesRepository.save(
+    await this.coursesRepository.save(
       this.coursesRepository.merge(course, updateCourseDto),
     );
+
+    return this.findById(id);
   }
 
   // Ownership is verified by CourseOwnershipGuard before this runs.
@@ -85,6 +102,14 @@ export class CoursesService {
   }
 
   // --- Helper Methods ---
+
+  // Categories are paginated, so a course brings the name it needs with it.
+  private courseWithCategoryQuery() {
+    return this.coursesRepository
+      .createQueryBuilder('course')
+      .leftJoin('course.category', 'category')
+      .addSelect(['category.id', 'category.name']);
+  }
 
   private async findCourseEntity(id: string): Promise<Course> {
     const course = await this.coursesRepository.findOne({

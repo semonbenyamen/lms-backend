@@ -1,8 +1,14 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { SectionResponseDto } from '../../sections/dto/section-response.dto.js';
+import { ApiProperty, ApiPropertyOptional, PickType } from '@nestjs/swagger';
 
+import { CategoryResponseDto } from '../../categories/dto/category-response.dto.js';
 import { CourseDifficulty } from '../../common/enums/course-difficulty.enum.js';
 import { CourseLanguage } from '../../common/enums/course-language.enum.js';
+import { SectionResponseDto } from '../../sections/dto/section-response.dto.js';
+
+export class CourseCategoryDto extends PickType(CategoryResponseDto, [
+  'id',
+  'name',
+]) {}
 
 export class CourseResponseDto {
   @ApiProperty({
@@ -26,9 +32,15 @@ export class CourseResponseDto {
 
   @ApiProperty({
     example: '550e8400-e29b-41d4-a716-446655440010',
-    description: 'The category of the course, from GET /categories',
+    description: 'The category of the course, from GET /dashboard/categories',
   })
   categoryId: string;
+
+  @ApiProperty({
+    type: CourseCategoryDto,
+    description: 'The category of the course with its name',
+  })
+  category: CourseCategoryDto;
 
   @ApiProperty({
     example: ['NestJS', 'TypeORM', 'PostgreSQL'],
@@ -37,13 +49,12 @@ export class CourseResponseDto {
   })
   topics: string[];
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     enum: CourseDifficulty,
     example: CourseDifficulty.INTERMEDIATE,
     description: 'Difficulty level of the course',
-    nullable: true,
   })
-  difficulty: CourseDifficulty | null;
+  difficulty: CourseDifficulty;
 
   @ApiProperty({
     enum: CourseLanguage,
