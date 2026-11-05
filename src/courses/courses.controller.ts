@@ -24,6 +24,7 @@ import { Roles } from '../auth/decorators/roles.decorator.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import type { AuthenticatedRequest } from '../auth/types/authenticated-request.type.js';
+import { ApiAuthErrorResponses } from '../common/decorators/api-error-responses.decorator.js';
 import { ApiSuccessResponse } from '../common/decorators/api-success-response.decorator.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
@@ -32,6 +33,8 @@ import { CourseResponseDto } from './dto/course-response.dto.js';
 import { CreateCourseDto } from './dto/create-course.dto.js';
 import { UpdateCourseDto } from './dto/update-course.dto.js';
 import { CourseOwnershipGuard } from './guards/course-ownership.guard.js';
+
+const NOT_COURSE_OWNER = 'Forbidden - not course owner or admin';
 
 @ApiTags('Courses')
 @Controller('dashboard/courses')
@@ -46,21 +49,11 @@ export class CoursesController {
     summary: 'Create a new course (Instructor or Admin)',
   })
   @ApiSuccessResponse(CourseResponseDto, HttpStatus.CREATED)
-  @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: 'Invalid request body or validation failed',
-  })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'Authentication required',
-  })
-  @ApiResponse({
-    status: HttpStatus.FORBIDDEN,
-    description: 'Forbidden - only instructors and admins can create courses',
-  })
-  @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: 'Category not found',
+  @ApiAuthErrorResponses({
+    [HttpStatus.BAD_REQUEST]: 'Invalid request body or validation failed',
+    [HttpStatus.FORBIDDEN]:
+      'Forbidden - only instructors and admins can create courses',
+    [HttpStatus.NOT_FOUND]: 'Category not found',
   })
   create(
     @Body() createCourseDto: CreateCourseDto,
@@ -77,17 +70,10 @@ export class CoursesController {
     summary: 'List courses for the dashboard (Admin all, Instructor own)',
   })
   @ApiSuccessResponse(CourseResponseDto, HttpStatus.OK, { isPaginated: true })
-  @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: 'Invalid pagination query parameters',
-  })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'Authentication required',
-  })
-  @ApiResponse({
-    status: HttpStatus.FORBIDDEN,
-    description: 'Forbidden - only instructors and admins can list courses',
+  @ApiAuthErrorResponses({
+    [HttpStatus.BAD_REQUEST]: 'Invalid pagination query parameters',
+    [HttpStatus.FORBIDDEN]:
+      'Forbidden - only instructors and admins can list courses',
   })
   findAll(
     @Query() paginationQuery: PaginationQueryDto,
@@ -105,21 +91,10 @@ export class CoursesController {
     summary: 'Get course details by ID (Course Owner or Admin)',
   })
   @ApiSuccessResponse(CourseResponseDto, HttpStatus.OK)
-  @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: 'Invalid UUID format',
-  })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'Authentication required',
-  })
-  @ApiResponse({
-    status: HttpStatus.FORBIDDEN,
-    description: 'Forbidden - not course owner or admin',
-  })
-  @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: 'Course not found',
+  @ApiAuthErrorResponses({
+    [HttpStatus.BAD_REQUEST]: 'Invalid UUID format',
+    [HttpStatus.FORBIDDEN]: NOT_COURSE_OWNER,
+    [HttpStatus.NOT_FOUND]: 'Course not found',
   })
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     // Ownership is verified by CourseOwnershipGuard.
@@ -135,21 +110,10 @@ export class CoursesController {
     summary: 'Update a course by ID (Course Owner or Admin)',
   })
   @ApiSuccessResponse(CourseResponseDto, HttpStatus.OK)
-  @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: 'Invalid request body or UUID format',
-  })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'Authentication required',
-  })
-  @ApiResponse({
-    status: HttpStatus.FORBIDDEN,
-    description: 'Forbidden - not course owner or admin',
-  })
-  @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: 'Course or category not found',
+  @ApiAuthErrorResponses({
+    [HttpStatus.BAD_REQUEST]: 'Invalid request body or UUID format',
+    [HttpStatus.FORBIDDEN]: NOT_COURSE_OWNER,
+    [HttpStatus.NOT_FOUND]: 'Course or category not found',
   })
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -172,21 +136,10 @@ export class CoursesController {
     status: HttpStatus.NO_CONTENT,
     description: 'Course soft deleted successfully',
   })
-  @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: 'Invalid UUID format',
-  })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'Authentication required',
-  })
-  @ApiResponse({
-    status: HttpStatus.FORBIDDEN,
-    description: 'Forbidden - not course owner or admin',
-  })
-  @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: 'Course not found',
+  @ApiAuthErrorResponses({
+    [HttpStatus.BAD_REQUEST]: 'Invalid UUID format',
+    [HttpStatus.FORBIDDEN]: NOT_COURSE_OWNER,
+    [HttpStatus.NOT_FOUND]: 'Course not found',
   })
   remove(@Param('id', new ParseUUIDPipe()) id: string) {
     // Ownership is verified by CourseOwnershipGuard.
