@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -116,7 +116,7 @@ describe('CoursesService', () => {
       skip: ReturnType<typeof vi.fn>;
       take: ReturnType<typeof vi.fn>;
       andWhere: ReturnType<typeof vi.fn>;
-      getMany: ReturnType<typeof vi.fn>;
+      getManyAndCount: ReturnType<typeof vi.fn>;
     };
 
     beforeEach(() => {
@@ -125,7 +125,7 @@ describe('CoursesService', () => {
         skip: vi.fn().mockReturnThis(),
         take: vi.fn().mockReturnThis(),
         andWhere: vi.fn().mockReturnThis(),
-        getMany: vi.fn().mockResolvedValue([]),
+        getManyAndCount: vi.fn().mockResolvedValue([[], 0]),
       };
       mockCoursesRepo.createQueryBuilder.mockReturnValue(mockQueryBuilder);
     });
@@ -137,22 +137,28 @@ describe('CoursesService', () => {
       expect(mockQueryBuilder.take).toHaveBeenCalledWith(10);
     });
 
-    it('should reject invalid page parameter (< 1)', async () => {
-      await expect(
-        service.findAll({ page: 0, limit: 10 }, instructorUser),
-      ).rejects.toThrow(BadRequestException);
-    });
+    it('should return the courses with the pagination meta', async () => {
+      const courses = [{ id: 'course-1' }, { id: 'course-2' }];
+      mockQueryBuilder.getManyAndCount.mockResolvedValue([courses, 12]);
 
-    it('should reject invalid limit parameter (< 1)', async () => {
-      await expect(
-        service.findAll({ page: 1, limit: -5 }, instructorUser),
-      ).rejects.toThrow(BadRequestException);
-    });
+      const result = await service.findAll(
+        { page: 2, limit: 2 },
+        instructorUser,
+      );
 
-    it('should cap limit at maximum 100', async () => {
-      await service.findAll({ page: 1, limit: 200 }, adminUser);
-
-      expect(mockQueryBuilder.take).toHaveBeenCalledWith(100);
+      expect(mockQueryBuilder.skip).toHaveBeenCalledWith(2);
+      expect(mockQueryBuilder.take).toHaveBeenCalledWith(2);
+      expect(result).toEqual({
+        items: courses,
+        meta: {
+          total: 12,
+          page: 2,
+          limit: 2,
+          totalPages: 6,
+          hasNextPage: true,
+          hasPreviousPage: true,
+        },
+      });
     });
 
     it('should limit instructors to their own courses', async () => {

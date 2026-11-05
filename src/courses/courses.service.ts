@@ -6,7 +6,11 @@ import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { CategoriesService } from '../categories/categories.service.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
-import { getPaginationParams } from '../common/pagintion/pagination.util.js';
+import {
+  getPaginationMeta,
+  getPaginationParams,
+  PaginatedResult,
+} from '../common/pagintion/pagination.util.js';
 import { CreateCourseDto } from './dto/create-course.dto.js';
 import { UpdateCourseDto } from './dto/update-course.dto.js';
 import { Course } from './entities/course.entity.js';
@@ -37,8 +41,8 @@ export class CoursesService {
   async findAll(
     paginationQuery: PaginationQueryDto,
     user: Pick<JwtPayload, 'sub' | 'role'>,
-  ): Promise<Course[]> {
-    const { skip, take } = getPaginationParams(paginationQuery);
+  ): Promise<PaginatedResult<Course>> {
+    const { page, limit, skip, take } = getPaginationParams(paginationQuery);
 
     const queryBuilder = this.coursesRepository
       .createQueryBuilder('course')
@@ -54,7 +58,9 @@ export class CoursesService {
     }
 
     // TypeORM excludes soft-deleted courses from normal queries.
-    return queryBuilder.getMany();
+    const [items, total] = await queryBuilder.getManyAndCount();
+
+    return { items, meta: getPaginationMeta(total, page, limit) };
   }
 
   // Ownership is verified by CourseOwnershipGuard before this runs.
@@ -66,7 +72,7 @@ export class CoursesService {
   async update(id: string, updateCourseDto: UpdateCourseDto): Promise<Course> {
     const course = await this.findCourseEntity(id);
 
-    if (updateCourseDto.categoryId !== undefined) {
+    if (updateCourseDto.categoryId) {
       await this.categoriesService.assertExists(updateCourseDto.categoryId);
     }
 

@@ -77,7 +77,19 @@ describe('CoursesController', () => {
   it('should list courses for the current user', async () => {
     const pagination = { page: 1, limit: 10 };
 
-    mockCoursesService.findAll.mockResolvedValue([]);
+    const paginatedCourses = {
+      items: [],
+      meta: {
+        total: 0,
+        page: 1,
+        limit: 10,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    };
+
+    mockCoursesService.findAll.mockResolvedValue(paginatedCourses);
 
     const result = await controller.findAll(pagination, mockInstructorReq);
 
@@ -85,7 +97,7 @@ describe('CoursesController', () => {
       pagination,
       mockInstructorReq.user,
     );
-    expect(result).toEqual([]);
+    expect(result).toEqual(paginatedCourses);
   });
 
   it('should get course details through service', async () => {

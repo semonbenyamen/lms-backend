@@ -76,7 +76,7 @@ export class CoursesController {
   @ApiOperation({
     summary: 'List courses for the dashboard (Admin all, Instructor own)',
   })
-  @ApiSuccessResponse(CourseResponseDto, HttpStatus.OK, { isArray: true })
+  @ApiSuccessResponse(CourseResponseDto, HttpStatus.OK, { isPaginated: true })
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
     description: 'Invalid pagination query parameters',
