@@ -17,7 +17,7 @@ export interface PaginatedResult<T> {
 export function getPaginationParams({
   page = 1,
   limit = 10,
-}: PaginationQueryDto): PaginationParams {
+}: PaginationQueryDto = {}): PaginationParams {
   return { page, limit, skip: (page - 1) * limit, take: limit };
 }
 

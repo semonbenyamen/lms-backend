@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import type { AuthenticatedRequest } from '../auth/types/authenticated-request.type.js';
+import { CourseDifficulty } from '../common/enums/course-difficulty.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { CoursesController } from './courses.controller.js';
 import { CoursesService } from './courses.service.js';
@@ -57,6 +58,7 @@ describe('CoursesController', () => {
       description: 'Desc',
       categoryId: 'category-1',
       topics: ['Topic 1'],
+      difficulty: CourseDifficulty.BEGINNER,
     };
 
     mockCoursesService.create.mockResolvedValue({

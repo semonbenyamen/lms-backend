@@ -58,14 +58,13 @@ export class CreateCourseDto {
   @ArrayNotEmpty({ message: 'Topics must contain at least one topic' })
   topics: string[];
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     enum: CourseDifficulty,
     example: CourseDifficulty.INTERMEDIATE,
     description: 'Difficulty level of the course',
   })
-  @IsOptional()
   @IsEnum(CourseDifficulty)
-  difficulty?: CourseDifficulty;
+  difficulty: CourseDifficulty;
 
   @ApiPropertyOptional({
     enum: CourseLanguage,

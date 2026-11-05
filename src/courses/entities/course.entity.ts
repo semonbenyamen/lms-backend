@@ -38,8 +38,8 @@ export class Course {
   @Column('text', { array: true, default: '{}' })
   topics: string[];
 
-  @Column({ type: 'enum', enum: CourseDifficulty, nullable: true })
-  difficulty: CourseDifficulty | null;
+  @Column({ type: 'enum', enum: CourseDifficulty })
+  difficulty: CourseDifficulty;
 
   @Column({
     type: 'enum',

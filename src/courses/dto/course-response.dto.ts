@@ -36,13 +36,12 @@ export class CourseResponseDto {
   })
   topics: string[];
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     enum: CourseDifficulty,
     example: CourseDifficulty.INTERMEDIATE,
     description: 'Difficulty level of the course',
-    nullable: true,
   })
-  difficulty: CourseDifficulty | null;
+  difficulty: CourseDifficulty;
 
   @ApiProperty({
     enum: CourseLanguage,
