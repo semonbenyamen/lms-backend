@@ -66,15 +66,13 @@ export class CreateCourseDto {
   @IsEnum(CourseDifficulty)
   difficulty: CourseDifficulty;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     enum: CourseLanguage,
     example: CourseLanguage.ENGLISH,
     description: 'Language of instruction',
-    default: CourseLanguage.ENGLISH,
   })
-  @IsOptional()
   @IsEnum(CourseLanguage)
-  language?: CourseLanguage;
+  language: CourseLanguage;
 
   @ApiPropertyOptional({
     example: ['Basic TypeScript', 'Node.js fundamentals'],
