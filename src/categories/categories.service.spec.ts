@@ -173,16 +173,20 @@ describe('CategoriesService', () => {
 
   describe('update', () => {
     it('should keep the name when it is not sent', async () => {
-      const result = await service.update('category-1', {});
+      await service.update('category-1', {});
 
-      expect(result.name).toBe(category.name);
+      expect(mockCategoriesRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ name: category.name }),
+      );
       expect(queryBuilder.getExists).not.toHaveBeenCalled();
     });
 
     it('should rename a category', async () => {
-      const result = await service.update('category-1', { name: 'Frontend' });
+      await service.update('category-1', { name: 'Frontend' });
 
-      expect(result.name).toBe('Frontend');
+      expect(mockCategoriesRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Frontend' }),
+      );
     });
 
     it('should ignore the same category when checking the name', async () => {
