@@ -107,9 +107,8 @@ describe('CoursesService', () => {
         instructorId,
       });
       expect(mockCoursesRepo.save).toHaveBeenCalledWith(mockCourse);
-      expect(courseQueryBuilder.where).toHaveBeenCalledWith('course.id = :id', {
-        id: 'course-1',
-      });
+      // The controller needs only the new id, so the course is not loaded again.
+      expect(courseQueryBuilder.getOne).not.toHaveBeenCalled();
       expect(result).toEqual(mockCourse);
     });
 
@@ -237,11 +236,10 @@ describe('CoursesService', () => {
       mockCoursesRepo.findOne.mockResolvedValue({ ...course });
       mockCoursesRepo.save.mockImplementation((c) => Promise.resolve(c));
 
-      const updated = await service.update('course-1', {
+      await service.update('course-1', {
         title: 'Updated Title',
       });
 
-      expect(updated.title).toBe('Updated Title');
       expect(mockCoursesRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 'course-1',
@@ -254,11 +252,13 @@ describe('CoursesService', () => {
       mockCoursesRepo.findOne.mockResolvedValue({ ...course });
       mockCoursesRepo.save.mockImplementation((c) => Promise.resolve(c));
 
-      const updated = await service.update('course-1', {
+      await service.update('course-1', {
         title: 'New Title',
       });
 
-      expect(updated.instructorId).toBe(instructorId);
+      expect(mockCoursesRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ instructorId }),
+      );
     });
 
     it('should reject updates for courses that do not exist', async () => {

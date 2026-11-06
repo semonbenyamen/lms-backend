@@ -67,14 +67,14 @@ export class CategoriesService {
     return this.saveCategory(this.categoriesRepository.create(dto));
   }
 
-  async update(id: string, dto: UpdateCategoryDto): Promise<Category> {
+  async update(id: string, dto: UpdateCategoryDto): Promise<void> {
     const category = await this.findById(id);
 
     if (dto.name && !(await this.isNameAvailable(dto.name, id))) {
       throw new ConflictException(`Category "${dto.name}" already exists`);
     }
 
-    return this.saveCategory(this.categoriesRepository.merge(category, dto));
+    await this.saveCategory(this.categoriesRepository.merge(category, dto));
   }
 
   async remove(id: string): Promise<void> {

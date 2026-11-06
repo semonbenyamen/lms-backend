@@ -26,13 +26,17 @@ import { RolesGuard } from '../auth/guards/roles.guard.js';
 import type { AuthenticatedRequest } from '../auth/types/authenticated-request.type.js';
 import { ApiAuthErrorResponses } from '../common/decorators/api-error-responses.decorator.js';
 import { ApiSuccessResponse } from '../common/decorators/api-success-response.decorator.js';
+import { ApiResponseDto } from '../common/dto/api-response.dto.js';
+import { IdResponseDto } from '../common/dto/id-response.dto.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
+import { PaginatedResult } from '../common/pagintion/pagination.util.js';
 import { CoursesService } from './courses.service.js';
 import { CourseResponseDto } from './dto/course-response.dto.js';
 import { CreateCourseDto } from './dto/create-course.dto.js';
 import { UpdateCourseDto } from './dto/update-course.dto.js';
 import { CourseOwnershipGuard } from './guards/course-ownership.guard.js';
+import { toCourseResponseDto } from './transformers/course-response.transformer.js';
 
 const NOT_COURSE_OWNER = 'Forbidden - not course owner or admin';
 
@@ -48,18 +52,24 @@ export class CoursesController {
   @ApiOperation({
     summary: 'Create a new course (Instructor or Admin)',
   })
-  @ApiSuccessResponse(CourseResponseDto, HttpStatus.CREATED)
+  // The frontend opens the new course page with this id.
+  @ApiSuccessResponse(IdResponseDto, HttpStatus.CREATED)
   @ApiAuthErrorResponses({
     [HttpStatus.BAD_REQUEST]: 'Invalid request body or validation failed',
     [HttpStatus.FORBIDDEN]:
       'Forbidden - only instructors and admins can create courses',
     [HttpStatus.NOT_FOUND]: 'Category not found',
   })
-  create(
+  async create(
     @Body() createCourseDto: CreateCourseDto,
     @Req() request: AuthenticatedRequest,
-  ) {
-    return this.coursesService.create(createCourseDto, request.user.sub);
+  ): Promise<IdResponseDto> {
+    const { id } = await this.coursesService.create(
+      createCourseDto,
+      request.user.sub,
+    );
+
+    return { id };
   }
 
   @Get()
@@ -75,11 +85,16 @@ export class CoursesController {
     [HttpStatus.FORBIDDEN]:
       'Forbidden - only instructors and admins can list courses',
   })
-  findAll(
+  async findAll(
     @Query() paginationQuery: PaginationQueryDto,
     @Req() request: AuthenticatedRequest,
-  ) {
-    return this.coursesService.findAll(paginationQuery, request.user);
+  ): Promise<PaginatedResult<CourseResponseDto>> {
+    const { items, meta } = await this.coursesService.findAll(
+      paginationQuery,
+      request.user,
+    );
+
+    return { items: items.map(toCourseResponseDto), meta };
   }
 
   @Get(':id')
@@ -96,9 +111,11 @@ export class CoursesController {
     [HttpStatus.FORBIDDEN]: NOT_COURSE_OWNER,
     [HttpStatus.NOT_FOUND]: 'Course not found',
   })
-  findOne(@Param('id', new ParseUUIDPipe()) id: string) {
+  async findOne(
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<CourseResponseDto> {
     // Ownership is verified by CourseOwnershipGuard.
-    return this.coursesService.findById(id);
+    return toCourseResponseDto(await this.coursesService.findById(id));
   }
 
   @Patch(':id')
@@ -109,7 +126,11 @@ export class CoursesController {
   @ApiOperation({
     summary: 'Update a course by ID (Course Owner or Admin)',
   })
-  @ApiSuccessResponse(CourseResponseDto, HttpStatus.OK)
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Course updated successfully',
+    type: ApiResponseDto,
+  })
   @ApiAuthErrorResponses({
     [HttpStatus.BAD_REQUEST]: 'Invalid request body or UUID format',
     [HttpStatus.FORBIDDEN]: NOT_COURSE_OWNER,
@@ -118,7 +139,7 @@ export class CoursesController {
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() updateCourseDto: UpdateCourseDto,
-  ) {
+  ): Promise<void> {
     // Ownership is verified by CourseOwnershipGuard.
     return this.coursesService.update(id, updateCourseDto);
   }

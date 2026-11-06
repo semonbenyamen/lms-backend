@@ -35,9 +35,7 @@ export class CoursesService {
       instructorId,
     });
 
-    const { id } = await this.coursesRepository.save(course);
-
-    return this.findById(id);
+    return this.coursesRepository.save(course);
   }
 
   async findAll(
@@ -78,7 +76,7 @@ export class CoursesService {
   }
 
   // Ownership is verified by CourseOwnershipGuard before this runs.
-  async update(id: string, updateCourseDto: UpdateCourseDto): Promise<Course> {
+  async update(id: string, updateCourseDto: UpdateCourseDto): Promise<void> {
     const course = await this.findCourseEntity(id);
 
     if (updateCourseDto.categoryId) {
@@ -89,8 +87,6 @@ export class CoursesService {
     await this.coursesRepository.save(
       this.coursesRepository.merge(course, updateCourseDto),
     );
-
-    return this.findById(id);
   }
 
   // Ownership is verified by CourseOwnershipGuard before this runs.
