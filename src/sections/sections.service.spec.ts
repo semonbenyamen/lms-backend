@@ -231,6 +231,29 @@ describe('SectionsService', () => {
       ).resolves.toEqual([]);
     });
 
+    
+it('should return all sections without pagination', async () => {
+  const sections = [
+    { id: 's-1', courseId: 'c-1', orderIndex: 1 },
+    { id: 's-2', courseId: 'c-1', orderIndex: 2 },
+  ];
+
+  mockCoursesService.findById.mockResolvedValue(draftCourse);
+  mockSectionsRepo.find.mockResolvedValue(sections);
+
+  // Verify that all sections are returned without pagination.
+  const result = await service.findByCourse('c-1', instructorUser);
+
+  expect(result).toEqual(sections);
+
+  // Verify that the database query has no skip or take limits.
+  expect(mockSectionsRepo.find).toHaveBeenCalledWith({
+    where: { courseId: 'c-1' },
+    order: { orderIndex: 'ASC' },
+  });
+});
+
+
     it('should throw NotFoundException to student for a draft course', async () => {
       mockCoursesService.findById.mockResolvedValue(draftCourse);
 

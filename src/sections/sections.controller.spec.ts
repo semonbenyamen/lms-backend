@@ -157,14 +157,16 @@ describe('SectionsController', () => {
       mockReq,
     );
 
+    
+    // Verify that the controller passes course ID and user details without pagination.
     expect(mockSectionsService.findByCourse).toHaveBeenCalledWith(
       'c-1',
       {
         sub: mockReq.user.sub,
         role: mockReq.user.role,
       },
-      undefined,
     );
+
 
     // Every section must be transformed into its public DTO.
     expect(result).toEqual([

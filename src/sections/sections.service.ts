@@ -4,13 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindManyOptions, Repository } from 'typeorm';
-
+import { Repository } from 'typeorm';
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { canReadCourse } from '../common/authorization/authorization.util.js';
 import { isUniqueViolation } from '../common/database/is-unique-violation.js';
-import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
-import { getPaginationParams } from '../common/pagintion/pagination.util.js';
 import { CoursesService } from '../courses/courses.service.js';
 import { CreateSectionDto } from './dto/create-section.dto.js';
 import { UpdateSectionDto } from './dto/update-section.dto.js';
@@ -61,35 +58,30 @@ export class SectionsService {
     return section;
   }
 
-  async findByCourse(
-    courseId: string,
-    user: SectionActor,
-    paginationQuery?: PaginationQueryDto,
-  ): Promise<Section[]> {
-    const course = await this.coursesService.findById(courseId);
+  
+async findByCourse(
+  courseId: string,
+  user: SectionActor,
+): Promise<Section[]> {
+  // Check that the course exists.
+  const course = await this.coursesService.findById(courseId);
 
-    if (!canReadCourse(course, user)) {
-      throw new NotFoundException(`Course with ID ${courseId} not found`);
-    }
-
-    const findOptions: FindManyOptions<Section> = {
-      where: { courseId },
-      order: {
-        orderIndex: 'ASC',
-      },
-    };
-
-    if (
-      paginationQuery?.page !== undefined ||
-      paginationQuery?.limit !== undefined
-    ) {
-      const { skip, take } = getPaginationParams(paginationQuery);
-      findOptions.skip = skip;
-      findOptions.take = take;
-    }
-
-    return this.sectionsRepository.find(findOptions);
+  // Allow access only if the user can view the course.
+  if (!canReadCourse(course, user)) {
+    throw new NotFoundException(
+      `Course with ID ${courseId} not found`,
+    );
   }
+
+  // Return all sections ordered by their position.
+  return this.sectionsRepository.find({
+    where: { courseId },
+    order: {
+      orderIndex: 'ASC',
+    },
+  });
+}
+
 
 
   async update(

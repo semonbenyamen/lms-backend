@@ -6,7 +6,6 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
-  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -25,7 +24,6 @@ import type { AuthenticatedRequest } from '../auth/types/authenticated-request.t
 import { ApiAuthErrorResponses } from '../common/decorators/api-error-responses.decorator.js';
 import { ApiSuccessResponse } from '../common/decorators/api-success-response.decorator.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
-import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
 import { CreateSectionDto } from './dto/create-section.dto.js';
 import { SectionResponseDto } from './dto/section-response.dto.js';
 import { SectionsService } from './sections.service.js';
@@ -85,22 +83,20 @@ export class CourseSectionsController {
     [HttpStatus.NOT_FOUND]: 'Course not found',
   })
 
-  async findByCourse(
-    @Param('courseId', new ParseUUIDPipe()) courseId: string,
-    @Req() request: AuthenticatedRequest,
-    @Query() paginationQuery?: PaginationQueryDto,
-  ): Promise<SectionResponseDto[]> {
-    const sections = await this.sectionsService.findByCourse(
-      courseId,
-      {
-        sub: request.user.sub,
-        role: request.user.role,
-      },
-      paginationQuery,
-    );
+  
+async findByCourse(
+  @Param('courseId', new ParseUUIDPipe()) courseId: string,
+  @Req() request: AuthenticatedRequest,
+): Promise<SectionResponseDto[]> {
+  const sections = await this.sectionsService.findByCourse(
+    courseId,
+    {
+      sub: request.user.sub,
+      role: request.user.role,
+    },
+  );
 
-    // Transform each section into its public response DTO.
-    return sections.map(toSectionResponseDto);
-  }
+  return sections.map(toSectionResponseDto);
+}
 
 }
