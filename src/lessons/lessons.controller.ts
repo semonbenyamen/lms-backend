@@ -27,6 +27,7 @@ import { UserRole } from '../common/enums/user-role.enum.js';
 import { LessonResponseDto } from './dto/lesson-response.dto.js';
 import { UpdateLessonDto } from './dto/update-lesson.dto.js';
 import { LessonsService } from './lessons.service.js';
+import { toLessonResponseDto } from './transformers/lesson-response.transformer.js';
 
 @ApiTags('Lessons')
 @Controller('lessons')
@@ -50,11 +51,14 @@ export class LessonsController {
     status: HttpStatus.NOT_FOUND,
     description: 'Lesson not found or unpublished',
   })
-  findOne(
+  async findOne(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() request: AuthenticatedRequest,
   ) {
-    return this.lessonsService.findById(id, request.user);
+    const { sub, role } = request.user;
+    const lesson = await this.lessonsService.findById(id, { sub, role });
+
+    return toLessonResponseDto(lesson);
   }
 
   @Patch(':id')
@@ -83,12 +87,15 @@ export class LessonsController {
     status: HttpStatus.CONFLICT,
     description: 'orderIndex is already used in this section',
   })
-  update(
+  async update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateLessonDto,
     @Req() request: AuthenticatedRequest,
   ) {
-    return this.lessonsService.update(id, dto, request.user);
+    const { sub, role } = request.user;
+    const lesson = await this.lessonsService.update(id, dto, { sub, role });
+
+    return toLessonResponseDto(lesson);
   }
 
   @Delete(':id')
@@ -121,6 +128,7 @@ export class LessonsController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() request: AuthenticatedRequest,
   ) {
-    return this.lessonsService.remove(id, request.user);
+    const { sub, role } = request.user;
+    return this.lessonsService.remove(id, { sub, role });
   }
 }

@@ -29,6 +29,37 @@ describe('LessonsController', () => {
     },
   } as unknown as AuthenticatedRequest;
 
+  const expectedUser = {
+    sub: mockReq.user.sub,
+    role: mockReq.user.role,
+  };
+
+  const lesson = {
+    id: 'l-1',
+    sectionId: 'section-1',
+    title: 'Lesson 1',
+    orderIndex: 1,
+    topic: null,
+    difficulty: null,
+    prerequisites: null,
+    createdAt: new Date('2026-11-01T10:00:00.000Z'),
+    updatedAt: new Date('2026-11-02T10:00:00.000Z'),
+    deletedAt: null,
+    section: { id: 'section-1' },
+  };
+
+  const expectedLesson = {
+    id: lesson.id,
+    sectionId: lesson.sectionId,
+    title: lesson.title,
+    orderIndex: lesson.orderIndex,
+    topic: lesson.topic,
+    difficulty: lesson.difficulty,
+    prerequisites: lesson.prerequisites,
+    createdAt: lesson.createdAt,
+    updatedAt: lesson.updatedAt,
+  };
+
   beforeEach(async () => {
     vi.clearAllMocks();
 
@@ -53,9 +84,9 @@ describe('LessonsController', () => {
     );
   });
 
-  it('should create a lesson in a section', async () => {
+  it('should create a lesson and return transformed data', async () => {
     const dto = { title: 'Lesson 1', orderIndex: 1 };
-    mockLessonsService.create.mockResolvedValue({ id: 'l-1', ...dto });
+    mockLessonsService.create.mockResolvedValue(lesson);
 
     const result = await sectionLessonsController.create(
       'section-1',
@@ -66,49 +97,70 @@ describe('LessonsController', () => {
     expect(mockLessonsService.create).toHaveBeenCalledWith(
       'section-1',
       dto,
-      mockReq.user,
+      expectedUser,
     );
-    expect(result).toHaveProperty('id', 'l-1');
+
+    expect(result).toEqual(expectedLesson);
+    expect(result).not.toHaveProperty('deletedAt');
+    expect(result).not.toHaveProperty('section');
   });
 
-  it('should find lesson by ID', async () => {
-    const lesson = { id: 'l-1', title: 'Lesson 1' };
+  it('should find lesson by ID and return transformed data', async () => {
     mockLessonsService.findById.mockResolvedValue(lesson);
 
     const result = await controller.findOne('l-1', mockReq);
 
-    expect(mockLessonsService.findById).toHaveBeenCalledWith('l-1', mockReq.user);
-    expect(result).toEqual(lesson);
+    expect(mockLessonsService.findById).toHaveBeenCalledWith(
+      'l-1',
+      expectedUser,
+    );
+
+    expect(result).toEqual(expectedLesson);
+    expect(result).not.toHaveProperty('deletedAt');
+    expect(result).not.toHaveProperty('section');
   });
 
-  it('should find lessons by section ID', async () => {
-    mockLessonsService.findBySection.mockResolvedValue([]);
+  it('should return all lessons without pagination and transform them', async () => {
+    mockLessonsService.findBySection.mockResolvedValue([lesson]);
 
     const result = await sectionLessonsController.findBySection(
       'section-1',
       mockReq,
-      {},
     );
 
     expect(mockLessonsService.findBySection).toHaveBeenCalledWith(
       'section-1',
-      mockReq.user,
-      {},
+      expectedUser,
     );
-    expect(result).toEqual([]);
+
+    expect(result).toEqual([expectedLesson]);
+    expect(result[0]).not.toHaveProperty('deletedAt');
+    expect(result[0]).not.toHaveProperty('section');
   });
 
-  it('should update a lesson', async () => {
-    mockLessonsService.update.mockResolvedValue({ id: 'l-1', title: 'Updated' });
+  it('should update a lesson and return transformed data', async () => {
+    const updatedLesson = { ...lesson, title: 'Updated' };
+    mockLessonsService.update.mockResolvedValue(updatedLesson);
 
-    const result = await controller.update('l-1', { title: 'Updated' }, mockReq);
+    const result = await controller.update(
+      'l-1',
+      { title: 'Updated' },
+      mockReq,
+    );
 
     expect(mockLessonsService.update).toHaveBeenCalledWith(
       'l-1',
       { title: 'Updated' },
-      mockReq.user,
+      expectedUser,
     );
-    expect(result).toHaveProperty('title', 'Updated');
+
+    expect(result).toEqual({
+      ...expectedLesson,
+      title: 'Updated',
+    });
+
+    expect(result).not.toHaveProperty('deletedAt');
+    expect(result).not.toHaveProperty('section');
   });
 
   it('should delete a lesson', async () => {
@@ -116,6 +168,6 @@ describe('LessonsController', () => {
 
     await controller.remove('l-1', mockReq);
 
-    expect(mockLessonsService.remove).toHaveBeenCalledWith('l-1', mockReq.user);
+    expect(mockLessonsService.remove).toHaveBeenCalledWith('l-1', expectedUser);
   });
 });

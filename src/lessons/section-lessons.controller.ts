@@ -6,7 +6,6 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
-  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -23,10 +22,10 @@ import { RolesGuard } from '../auth/guards/roles.guard.js';
 import type { AuthenticatedRequest } from '../auth/types/authenticated-request.type.js';
 import { ApiSuccessResponse } from '../common/decorators/api-success-response.decorator.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
-import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
 import { CreateLessonDto } from './dto/create-lesson.dto.js';
 import { LessonResponseDto } from './dto/lesson-response.dto.js';
 import { LessonsService } from './lessons.service.js';
+import { toLessonResponseDto } from './transformers/lesson-response.transformer.js';
 
 // Routes that need the parent section: create and list.
 @ApiTags('Lessons')
@@ -38,7 +37,9 @@ export class SectionLessonsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Create a new lesson in a section (Owner or Admin)' })
+  @ApiOperation({
+    summary: 'Create a new lesson in a section (Owner or Admin)',
+  })
   @ApiSuccessResponse(LessonResponseDto, HttpStatus.CREATED)
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
@@ -60,12 +61,18 @@ export class SectionLessonsController {
     status: HttpStatus.CONFLICT,
     description: 'orderIndex is already used in this section',
   })
-  create(
+  async create(
     @Param('sectionId', new ParseUUIDPipe()) sectionId: string,
     @Body() dto: CreateLessonDto,
     @Req() request: AuthenticatedRequest,
   ) {
-    return this.lessonsService.create(sectionId, dto, request.user);
+    const { sub, role } = request.user;
+    const lesson = await this.lessonsService.create(sectionId, dto, {
+      sub,
+      role,
+    });
+
+    return toLessonResponseDto(lesson);
   }
 
   @Get()
@@ -85,15 +92,16 @@ export class SectionLessonsController {
     status: HttpStatus.NOT_FOUND,
     description: 'Section not found',
   })
-  findBySection(
+  async findBySection(
     @Param('sectionId', new ParseUUIDPipe()) sectionId: string,
     @Req() request: AuthenticatedRequest,
-    @Query() paginationQuery: PaginationQueryDto,
   ) {
-    return this.lessonsService.findBySection(
-      sectionId,
-      request.user,
-      paginationQuery,
-    );
+    const { sub, role } = request.user;
+    const lessons = await this.lessonsService.findBySection(sectionId, {
+      sub,
+      role,
+    });
+
+    return lessons.map(toLessonResponseDto);
   }
 }

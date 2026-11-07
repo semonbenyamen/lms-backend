@@ -8,7 +8,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { QueryFailedError } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { JwtPayload } from '../auth/types/authenticated-request.type.js';
+import type { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { CourseDifficulty } from '../common/enums/course-difficulty.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { SectionsService } from '../sections/sections.service.js';
@@ -24,6 +24,9 @@ describe('LessonsService', () => {
     findOne: vi.fn(),
     find: vi.fn(),
     softRemove: vi.fn(),
+    merge: vi.fn((lesson: Lesson, dto: Partial<Lesson>) =>
+      Object.assign(lesson, dto),
+    ),
   };
 
   const mockSectionsService = {
@@ -77,7 +80,10 @@ describe('LessonsService', () => {
   describe('create', () => {
     const section = {
       id: 'section-1',
-      course: { instructorId: instructorUser.sub, isPublished: true },
+      course: {
+        instructorId: instructorUser.sub,
+        isPublished: true,
+      },
     };
 
     const createDto = {
@@ -89,11 +95,21 @@ describe('LessonsService', () => {
 
     it('should allow course owner instructor to create a lesson', async () => {
       mockSectionsService.findSectionWithCourse.mockResolvedValue(section);
-      const createdLesson = { id: 'l-1', sectionId: 'section-1', ...createDto };
+
+      const createdLesson = {
+        id: 'l-1',
+        sectionId: 'section-1',
+        ...createDto,
+      };
+
       mockLessonsRepo.create.mockReturnValue(createdLesson);
       mockLessonsRepo.save.mockResolvedValue(createdLesson);
 
-      const result = await service.create('section-1', createDto, instructorUser);
+      const result = await service.create(
+        'section-1',
+        createDto,
+        instructorUser,
+      );
 
       expect(mockLessonsRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -101,16 +117,24 @@ describe('LessonsService', () => {
           title: createDto.title,
         }),
       );
+
       expect(result).toEqual(createdLesson);
     });
 
     it('should allow admin to create a lesson', async () => {
       mockSectionsService.findSectionWithCourse.mockResolvedValue(section);
-      const createdLesson = { id: 'l-1', sectionId: 'section-1', ...createDto };
+
+      const createdLesson = {
+        id: 'l-1',
+        sectionId: 'section-1',
+        ...createDto,
+      };
+
       mockLessonsRepo.create.mockReturnValue(createdLesson);
       mockLessonsRepo.save.mockResolvedValue(createdLesson);
 
       const result = await service.create('section-1', createDto, adminUser);
+
       expect(result).toEqual(createdLesson);
     });
 
@@ -134,12 +158,19 @@ describe('LessonsService', () => {
 
     it('should throw ConflictException if the orderIndex is taken', async () => {
       mockSectionsService.findSectionWithCourse.mockResolvedValue(section);
-      mockLessonsRepo.create.mockReturnValue({ sectionId: 'section-1', ...createDto });
+
+      mockLessonsRepo.create.mockReturnValue({
+        sectionId: 'section-1',
+        ...createDto,
+      });
+
       mockLessonsRepo.save.mockRejectedValue(
         new QueryFailedError(
           'INSERT',
           [],
-          Object.assign(new Error('duplicate key'), { code: '23505' }),
+          Object.assign(new Error('duplicate key'), {
+            code: '23505',
+          }),
         ),
       );
 
@@ -154,7 +185,10 @@ describe('LessonsService', () => {
       id: 'lesson-1',
       title: 'Lesson 1',
       section: {
-        course: { instructorId: instructorUser.sub, isPublished: true },
+        course: {
+          instructorId: instructorUser.sub,
+          isPublished: true,
+        },
       },
       contentItems: [],
     };
@@ -163,7 +197,10 @@ describe('LessonsService', () => {
       id: 'lesson-2',
       title: 'Draft Lesson',
       section: {
-        course: { instructorId: instructorUser.sub, isPublished: false },
+        course: {
+          instructorId: instructorUser.sub,
+          isPublished: false,
+        },
       },
       contentItems: [],
     };
@@ -172,6 +209,7 @@ describe('LessonsService', () => {
       mockLessonsRepo.findOne.mockResolvedValue(publishedLesson);
 
       const result = await service.findById('lesson-1', studentUser);
+
       expect(result).toEqual(publishedLesson);
     });
 
@@ -187,6 +225,7 @@ describe('LessonsService', () => {
       mockLessonsRepo.findOne.mockResolvedValue(unpublishedLesson);
 
       const result = await service.findById('lesson-2', instructorUser);
+
       expect(result).toEqual(unpublishedLesson);
     });
 
@@ -194,6 +233,7 @@ describe('LessonsService', () => {
       mockLessonsRepo.findOne.mockResolvedValue(unpublishedLesson);
 
       const result = await service.findById('lesson-2', adminUser);
+
       expect(result).toEqual(unpublishedLesson);
     });
 
@@ -228,43 +268,58 @@ describe('LessonsService', () => {
   describe('findBySection', () => {
     const section = {
       id: 'section-1',
-      course: { instructorId: instructorUser.sub, isPublished: true },
+      course: {
+        instructorId: instructorUser.sub,
+        isPublished: true,
+      },
     };
 
     it('should return lessons for a section', async () => {
       mockSectionsService.findSectionWithCourse.mockResolvedValue(section);
       mockLessonsRepo.find.mockResolvedValue([]);
 
-      const result = await service.findBySection(
-        'section-1',
-        instructorUser,
-        {},
-      );
+      const result = await service.findBySection('section-1', instructorUser);
+
       expect(mockLessonsRepo.find).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { sectionId: 'section-1' } }),
+        expect.objectContaining({
+          where: { sectionId: 'section-1' },
+        }),
       );
+
       expect(result).toEqual([]);
     });
 
-    it('should use the default page and limit', async () => {
+    it('should return all lessons without pagination', async () => {
+      const lessons = [
+        { id: 'lesson-1', sectionId: 'section-1', orderIndex: 1 },
+        { id: 'lesson-2', sectionId: 'section-1', orderIndex: 2 },
+      ];
+
       mockSectionsService.findSectionWithCourse.mockResolvedValue(section);
-      mockLessonsRepo.find.mockResolvedValue([]);
+      mockLessonsRepo.find.mockResolvedValue(lessons);
 
-      await service.findBySection('section-1', studentUser, {});
+      const result = await service.findBySection('section-1', studentUser);
 
-      expect(mockLessonsRepo.find).toHaveBeenCalledWith(
-        expect.objectContaining({ skip: 0, take: 10 }),
-      );
+      expect(result).toEqual(lessons);
+
+      // Verify that lessons are ordered without pagination.
+      expect(mockLessonsRepo.find).toHaveBeenCalledWith({
+        where: { sectionId: 'section-1' },
+        order: { orderIndex: 'ASC' },
+      });
     });
 
     it('should throw NotFoundException to student for an unpublished course', async () => {
       mockSectionsService.findSectionWithCourse.mockResolvedValue({
         ...section,
-        course: { ...section.course, isPublished: false },
+        course: {
+          ...section.course,
+          isPublished: false,
+        },
       });
 
       await expect(
-        service.findBySection('section-1', studentUser, {}),
+        service.findBySection('section-1', studentUser),
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -274,7 +329,9 @@ describe('LessonsService', () => {
       id: 'lesson-1',
       title: 'Old Title',
       section: {
-        course: { instructorId: instructorUser.sub },
+        course: {
+          instructorId: instructorUser.sub,
+        },
       },
     };
 
@@ -288,6 +345,10 @@ describe('LessonsService', () => {
         instructorUser,
       );
 
+      expect(mockLessonsRepo.merge).toHaveBeenCalledWith(expect.anything(), {
+        title: 'New Title',
+      });
+
       expect(updated.title).toBe('New Title');
     });
 
@@ -297,6 +358,8 @@ describe('LessonsService', () => {
       await expect(
         service.update('lesson-1', { title: 'New Title' }, otherInstructorUser),
       ).rejects.toThrow(ForbiddenException);
+
+      expect(mockLessonsRepo.merge).not.toHaveBeenCalled();
     });
   });
 
@@ -304,7 +367,9 @@ describe('LessonsService', () => {
     const lesson = {
       id: 'lesson-1',
       section: {
-        course: { instructorId: instructorUser.sub },
+        course: {
+          instructorId: instructorUser.sub,
+        },
       },
     };
 
@@ -313,15 +378,18 @@ describe('LessonsService', () => {
       mockLessonsRepo.softRemove.mockResolvedValue(undefined);
 
       await service.remove('lesson-1', instructorUser);
+
       expect(mockLessonsRepo.softRemove).toHaveBeenCalledWith(lesson);
     });
 
     it('should forbid other instructor from deleting lesson', async () => {
       mockLessonsRepo.findOne.mockResolvedValue(lesson);
 
-      await expect(service.remove('lesson-1', otherInstructorUser)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.remove('lesson-1', otherInstructorUser),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(mockLessonsRepo.softRemove).not.toHaveBeenCalled();
     });
   });
 });

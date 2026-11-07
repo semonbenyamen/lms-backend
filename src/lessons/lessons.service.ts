@@ -12,8 +12,6 @@ import {
   canReadCourse,
 } from '../common/authorization/authorization.util.js';
 import { isUniqueViolation } from '../common/database/is-unique-violation.js';
-import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
-import { getPaginationParams } from '../common/pagintion/pagination.util.js';
 import { SectionsService } from '../sections/sections.service.js';
 import { CreateLessonDto } from './dto/create-lesson.dto.js';
 import { UpdateLessonDto } from './dto/update-lesson.dto.js';
@@ -69,23 +67,20 @@ export class LessonsService {
   async findBySection(
     sectionId: string,
     user: Pick<JwtPayload, 'sub' | 'role'>,
-    paginationQuery: PaginationQueryDto,
   ): Promise<Lesson[]> {
     const section = await this.sectionsService.findSectionWithCourse(sectionId);
 
+    // Check if the user can view the course.
     if (!canReadCourse(section.course, user)) {
       throw new NotFoundException(`Section with ID ${sectionId} not found`);
     }
 
-    const { skip, take } = getPaginationParams(paginationQuery);
-
+    // Return all active lessons ordered by their position.
     return this.lessonsRepository.find({
       where: { sectionId },
       order: {
         orderIndex: 'ASC',
       },
-      skip,
-      take,
     });
   }
 
@@ -102,21 +97,8 @@ export class LessonsService {
       'update lessons in',
     );
 
-    if (dto.title !== undefined) {
-      lesson.title = dto.title;
-    }
-    if (dto.orderIndex !== undefined) {
-      lesson.orderIndex = dto.orderIndex;
-    }
-    if (dto.topic !== undefined) {
-      lesson.topic = dto.topic;
-    }
-    if (dto.difficulty !== undefined) {
-      lesson.difficulty = dto.difficulty;
-    }
-    if (dto.prerequisites !== undefined) {
-      lesson.prerequisites = dto.prerequisites;
-    }
+    // Apply only the fields provided in the update request.
+    this.lessonsRepository.merge(lesson, dto);
 
     return this.saveLesson(lesson);
   }
