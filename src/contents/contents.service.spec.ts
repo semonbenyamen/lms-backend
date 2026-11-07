@@ -1,4 +1,8 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -80,6 +84,7 @@ describe('ContentsService', () => {
     const dto = {
       title: 'Video Lecture',
       contentType: ContentType.VIDEO,
+      videoUrl: 'https://example.com/v.mp4',
       orderIndex: 1,
     };
 
@@ -108,6 +113,45 @@ describe('ContentsService', () => {
 
       await expect(service.create('l-1', dto, otherInstructorUser)).rejects.toThrow(
         ForbiddenException,
+      );
+    });
+
+    it('should reject content without the field of its type', async () => {
+      mockLessonsRepo.findOne.mockResolvedValue(lesson);
+
+      await expect(
+        service.create(
+          'l-1',
+          { title: 'Image', contentType: ContentType.IMAGE, orderIndex: 2 },
+          instructorUser,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockContentItemsRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('should save only the fields of the content type', async () => {
+      mockLessonsRepo.findOne.mockResolvedValue(lesson);
+      mockContentItemsRepo.create.mockImplementation((c) => c);
+      mockContentItemsRepo.save.mockImplementation((c) => Promise.resolve(c));
+
+      await service.create(
+        'l-1',
+        {
+          title: 'Image',
+          contentType: ContentType.IMAGE,
+          imageUrl: 'https://example.com/i.png',
+          videoUrl: 'https://example.com/v.mp4',
+          orderIndex: 2,
+        },
+        instructorUser,
+      );
+
+      expect(mockContentItemsRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          bodyText: null,
+          videoUrl: null,
+          imageUrl: 'https://example.com/i.png',
+        }),
       );
     });
 
@@ -168,6 +212,10 @@ describe('ContentsService', () => {
     const content = {
       id: 'ci-1',
       title: 'Old Title',
+      contentType: ContentType.TEXT,
+      bodyText: 'Old text',
+      videoUrl: null,
+      imageUrl: null,
       lesson: {
         section: {
           course: { instructorId: instructorUser.sub },
@@ -181,6 +229,34 @@ describe('ContentsService', () => {
 
       const result = await service.update('ci-1', { title: 'New' }, instructorUser);
       expect(result.title).toBe('New');
+    });
+
+    it('should reject a type change without the field of the new type', async () => {
+      mockContentItemsRepo.findOne.mockResolvedValue({ ...content });
+
+      await expect(
+        service.update('ci-1', { contentType: ContentType.VIDEO }, instructorUser),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockContentItemsRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('should clear the old field when the type changes', async () => {
+      mockContentItemsRepo.findOne.mockResolvedValue({ ...content });
+      mockContentItemsRepo.save.mockImplementation((c) => Promise.resolve(c));
+
+      const result = await service.update(
+        'ci-1',
+        {
+          contentType: ContentType.IMAGE,
+          imageUrl: 'https://example.com/i.png',
+        },
+        instructorUser,
+      );
+
+      expect(result).toMatchObject({
+        bodyText: null,
+        imageUrl: 'https://example.com/i.png',
+      });
     });
 
     it('should forbid other instructor from updating content item', async () => {

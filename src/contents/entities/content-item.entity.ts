@@ -40,14 +40,15 @@ export class ContentItem {
   })
   contentType: ContentType;
 
-  @Column({ name: 'content_subtype', type: 'varchar', length: 50, nullable: true })
-  contentSubtype: string | null;
-
+  // Text content, or the transcript of a video.
   @Column({ name: 'body_text', type: 'text', nullable: true })
   bodyText: string | null;
 
   @Column({ name: 'video_url', type: 'varchar', length: 2048, nullable: true })
   videoUrl: string | null;
+
+  @Column({ name: 'image_url', type: 'varchar', length: 2048, nullable: true })
+  imageUrl: string | null;
 
   @Column({ name: 'duration_seconds', type: 'int', nullable: true })
   durationSeconds: number | null;

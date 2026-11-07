@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -7,10 +8,16 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
+import { ContentType } from '../common/enums/content-type.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
 import { getPaginationParams } from '../common/pagintion/pagination.util.js';
 import { Lesson } from '../lessons/entities/lesson.entity.js';
+import {
+  getTypeFieldError,
+  pickTypeFields,
+  TypeFieldValues,
+} from './content-type-fields.js';
 import { CreateContentItemDto } from './dto/create-content-item.dto.js';
 import { UpdateContentItemDto } from './dto/update-content-item.dto.js';
 import { ContentItem } from './entities/content-item.entity.js';
@@ -44,13 +51,13 @@ export class ContentsService {
       'create content in',
     );
 
+    this.assertTypeField(dto.contentType, dto);
+
     const contentItem = this.contentItemsRepository.create({
       lessonId,
       title: dto.title,
       contentType: dto.contentType,
-      contentSubtype: dto.contentSubtype ?? null,
-      bodyText: dto.bodyText ?? null,
-      videoUrl: dto.videoUrl ?? null,
+      ...pickTypeFields(dto.contentType, dto),
       durationSeconds: dto.durationSeconds ?? null,
       language: dto.language ?? null,
       orderIndex: dto.orderIndex,
@@ -161,14 +168,14 @@ export class ContentsService {
     if (dto.contentType !== undefined) {
       contentItem.contentType = dto.contentType;
     }
-    if (dto.contentSubtype !== undefined) {
-      contentItem.contentSubtype = dto.contentSubtype;
-    }
     if (dto.bodyText !== undefined) {
       contentItem.bodyText = dto.bodyText;
     }
     if (dto.videoUrl !== undefined) {
       contentItem.videoUrl = dto.videoUrl;
+    }
+    if (dto.imageUrl !== undefined) {
+      contentItem.imageUrl = dto.imageUrl;
     }
     if (dto.durationSeconds !== undefined) {
       contentItem.durationSeconds = dto.durationSeconds;
@@ -182,6 +189,13 @@ export class ContentsService {
     if (dto.tags !== undefined) {
       contentItem.tags = dto.tags;
     }
+
+    // The result must still match its type, e.g. a type change brings its field.
+    this.assertTypeField(contentItem.contentType, contentItem);
+    Object.assign(
+      contentItem,
+      pickTypeFields(contentItem.contentType, contentItem),
+    );
 
     return this.contentItemsRepository.save(contentItem);
   }
@@ -219,6 +233,17 @@ export class ContentsService {
     }
 
     return contentItem;
+  }
+
+  private assertTypeField(
+    contentType: ContentType,
+    values: TypeFieldValues,
+  ): void {
+    const error = getTypeFieldError(contentType, values);
+
+    if (error) {
+      throw new BadRequestException(error);
+    }
   }
 
   private assertOwnershipOrAdmin(

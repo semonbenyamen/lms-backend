@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+import { ContentType } from '../../common/enums/content-type.enum.js';
+
 export class ContentItemResponseDto {
   @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440004' })
   id: string;
@@ -10,11 +12,8 @@ export class ContentItemResponseDto {
   @ApiProperty({ example: 'Video Lecture: Setting up NestJS' })
   title: string;
 
-  @ApiProperty({ example: 'video', enum: ['text', 'video', 'quiz', 'resource'] })
-  contentType: string;
-
-  @ApiPropertyOptional({ example: 'mp4', nullable: true })
-  contentSubtype?: string | null;
+  @ApiProperty({ example: ContentType.VIDEO, enum: ContentType })
+  contentType: ContentType;
 
   @ApiPropertyOptional({ example: 'Lecture notes...', nullable: true })
   bodyText?: string | null;
@@ -24,6 +23,12 @@ export class ContentItemResponseDto {
     nullable: true,
   })
   videoUrl?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'https://cdn.example.com/images/diagram.png',
+    nullable: true,
+  })
+  imageUrl?: string | null;
 
   @ApiPropertyOptional({ example: 640, nullable: true })
   durationSeconds?: number | null;

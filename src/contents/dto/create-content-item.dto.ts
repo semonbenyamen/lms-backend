@@ -38,26 +38,17 @@ export class CreateContentItemDto {
   @ApiProperty({
     enum: ContentType,
     example: ContentType.VIDEO,
-    description: 'Content type (text, video, quiz, resource)',
+    description:
+      'Content type; text needs bodyText, video needs videoUrl and image needs imageUrl',
   })
   @IsEnum(ContentType, {
-    message: 'contentType must be one of: text, video, quiz, resource',
+    message: 'contentType must be one of: text, video, image',
   })
   contentType: ContentType;
 
   @ApiPropertyOptional({
-    example: 'mp4',
-    description: 'Subtype of the content (e.g. mp4, markdown, pdf)',
-    maxLength: 50,
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(50)
-  contentSubtype?: string;
-
-  @ApiPropertyOptional({
     example: '# Chapter Overview\nThis lecture covers controller decorators...',
-    description: 'Body text for text or resource content items',
+    description: 'Text content, or the transcript of a video',
   })
   @IsOptional()
   @IsString()
@@ -65,13 +56,23 @@ export class CreateContentItemDto {
 
   @ApiPropertyOptional({
     example: 'https://cdn.example.com/videos/lecture-1.mp4',
-    description: 'Storage URL reference for video content',
+    description: 'Link to the video, required for video content',
     maxLength: 2048,
   })
   @IsOptional()
   @IsString()
   @MaxLength(2048)
   videoUrl?: string;
+
+  @ApiPropertyOptional({
+    example: 'https://cdn.example.com/images/diagram.png',
+    description: 'Link to the image, required for image content',
+    maxLength: 2048,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  imageUrl?: string;
 
   @ApiPropertyOptional({
     example: 640,
