@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module.js';
 import { SectionsModule } from '../sections/sections.module.js';
 import { Lesson } from './entities/lesson.entity.js';
+import { LessonOwnershipGuard } from './guards/lesson-ownership.guard.js';
 import { LessonsController } from './lessons.controller.js';
 import { LessonsService } from './lessons.service.js';
 import { SectionLessonsController } from './section-lessons.controller.js';
@@ -11,7 +12,7 @@ import { SectionLessonsController } from './section-lessons.controller.js';
 @Module({
   imports: [TypeOrmModule.forFeature([Lesson]), AuthModule, SectionsModule],
   controllers: [SectionLessonsController, LessonsController],
-  providers: [LessonsService],
+  providers: [LessonsService, LessonOwnershipGuard],
   exports: [LessonsService],
 })
 export class LessonsModule {}

@@ -7,10 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
-import {
-  assertOwnershipOrAdmin,
-  canReadCourse,
-} from '../common/authorization/authorization.util.js';
+import { canReadCourse } from '../common/authorization/authorization.util.js';
 import { isUniqueViolation } from '../common/database/is-unique-violation.js';
 import { SectionsService } from '../sections/sections.service.js';
 import { CreateLessonDto } from './dto/create-lesson.dto.js';
@@ -25,20 +22,8 @@ export class LessonsService {
     private readonly sectionsService: SectionsService,
   ) {}
 
-  async create(
-    sectionId: string,
-    dto: CreateLessonDto,
-    user: Pick<JwtPayload, 'sub' | 'role'>,
-  ): Promise<Lesson> {
-    const section = await this.sectionsService.findSectionWithCourse(sectionId);
-
-    assertOwnershipOrAdmin(
-      user.role,
-      user.sub,
-      section.course.instructorId,
-      'create lessons in',
-    );
-
+  // Ownership is checked by LessonOwnershipGuard before these methods run.
+  async create(sectionId: string, dto: CreateLessonDto): Promise<Lesson> {
     const lesson = this.lessonsRepository.create({
       sectionId,
       title: dto.title,
@@ -84,18 +69,8 @@ export class LessonsService {
     });
   }
 
-  async update(
-    lessonId: string,
-    dto: UpdateLessonDto,
-    user: Pick<JwtPayload, 'sub' | 'role'>,
-  ): Promise<Lesson> {
+  async update(lessonId: string, dto: UpdateLessonDto): Promise<Lesson> {
     const lesson = await this.findLessonWithCourse(lessonId);
-    assertOwnershipOrAdmin(
-      user.role,
-      user.sub,
-      lesson.section.course.instructorId,
-      'update lessons in',
-    );
 
     // Apply only the fields provided in the update request.
     this.lessonsRepository.merge(lesson, dto);
@@ -103,17 +78,8 @@ export class LessonsService {
     return this.saveLesson(lesson);
   }
 
-  async remove(
-    lessonId: string,
-    user: Pick<JwtPayload, 'sub' | 'role'>,
-  ): Promise<void> {
+  async remove(lessonId: string): Promise<void> {
     const lesson = await this.findLessonWithCourse(lessonId);
-    assertOwnershipOrAdmin(
-      user.role,
-      user.sub,
-      lesson.section.course.instructorId,
-      'delete lessons in',
-    );
 
     await this.lessonsRepository.softRemove(lesson);
   }

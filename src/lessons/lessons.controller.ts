@@ -26,6 +26,7 @@ import { ApiSuccessResponse } from '../common/decorators/api-success-response.de
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { LessonResponseDto } from './dto/lesson-response.dto.js';
 import { UpdateLessonDto } from './dto/update-lesson.dto.js';
+import { LessonOwnershipGuard } from './guards/lesson-ownership.guard.js';
 import { LessonsService } from './lessons.service.js';
 import { toLessonResponseDto } from './transformers/lesson-response.transformer.js';
 
@@ -62,7 +63,8 @@ export class LessonsController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  // Authenticate the user, check their role, then verify course ownership.
+  @UseGuards(JwtAuthGuard, RolesGuard, LessonOwnershipGuard)
   @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a lesson (Owner or Admin)' })
@@ -90,17 +92,16 @@ export class LessonsController {
   async update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateLessonDto,
-    @Req() request: AuthenticatedRequest,
   ) {
-    const { sub, role } = request.user;
-    const lesson = await this.lessonsService.update(id, dto, { sub, role });
+    const lesson = await this.lessonsService.update(id, dto);
 
     return toLessonResponseDto(lesson);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  // Authenticate the user, check their role, then verify course ownership.
+  @UseGuards(JwtAuthGuard, RolesGuard, LessonOwnershipGuard)
   @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a lesson (Owner or Admin)' })
@@ -124,11 +125,7 @@ export class LessonsController {
     status: HttpStatus.NOT_FOUND,
     description: 'Lesson not found',
   })
-  remove(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    const { sub, role } = request.user;
-    return this.lessonsService.remove(id, { sub, role });
+  remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<void> {
+    return this.lessonsService.remove(id);
   }
 }

@@ -24,6 +24,7 @@ import { ApiSuccessResponse } from '../common/decorators/api-success-response.de
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { CreateLessonDto } from './dto/create-lesson.dto.js';
 import { LessonResponseDto } from './dto/lesson-response.dto.js';
+import { LessonOwnershipGuard } from './guards/lesson-ownership.guard.js';
 import { LessonsService } from './lessons.service.js';
 import { toLessonResponseDto } from './transformers/lesson-response.transformer.js';
 
@@ -34,7 +35,8 @@ export class SectionLessonsController {
   constructor(private readonly lessonsService: LessonsService) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  // Authenticate the user, check their role, then verify course ownership.
+  @UseGuards(JwtAuthGuard, RolesGuard, LessonOwnershipGuard)
   @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({
@@ -64,13 +66,8 @@ export class SectionLessonsController {
   async create(
     @Param('sectionId', new ParseUUIDPipe()) sectionId: string,
     @Body() dto: CreateLessonDto,
-    @Req() request: AuthenticatedRequest,
   ) {
-    const { sub, role } = request.user;
-    const lesson = await this.lessonsService.create(sectionId, dto, {
-      sub,
-      role,
-    });
+    const lesson = await this.lessonsService.create(sectionId, dto);
 
     return toLessonResponseDto(lesson);
   }

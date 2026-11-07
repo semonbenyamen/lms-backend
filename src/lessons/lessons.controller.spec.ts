@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import type { AuthenticatedRequest } from '../auth/types/authenticated-request.type.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
+import { LessonOwnershipGuard } from './guards/lesson-ownership.guard.js';
 import { LessonsController } from './lessons.controller.js';
 import { LessonsService } from './lessons.service.js';
 import { SectionLessonsController } from './section-lessons.controller.js';
@@ -76,6 +77,8 @@ describe('LessonsController', () => {
       .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
       .useValue({ canActivate: () => true })
+      .overrideGuard(LessonOwnershipGuard)
+      .useValue({ canActivate: () => true })
       .compile();
 
     controller = module.get<LessonsController>(LessonsController);
@@ -88,17 +91,9 @@ describe('LessonsController', () => {
     const dto = { title: 'Lesson 1', orderIndex: 1 };
     mockLessonsService.create.mockResolvedValue(lesson);
 
-    const result = await sectionLessonsController.create(
-      'section-1',
-      dto,
-      mockReq,
-    );
+    const result = await sectionLessonsController.create('section-1', dto);
 
-    expect(mockLessonsService.create).toHaveBeenCalledWith(
-      'section-1',
-      dto,
-      expectedUser,
-    );
+    expect(mockLessonsService.create).toHaveBeenCalledWith('section-1', dto);
 
     expect(result).toEqual(expectedLesson);
     expect(result).not.toHaveProperty('deletedAt');
@@ -142,17 +137,11 @@ describe('LessonsController', () => {
     const updatedLesson = { ...lesson, title: 'Updated' };
     mockLessonsService.update.mockResolvedValue(updatedLesson);
 
-    const result = await controller.update(
-      'l-1',
-      { title: 'Updated' },
-      mockReq,
-    );
+    const result = await controller.update('l-1', { title: 'Updated' });
 
-    expect(mockLessonsService.update).toHaveBeenCalledWith(
-      'l-1',
-      { title: 'Updated' },
-      expectedUser,
-    );
+    expect(mockLessonsService.update).toHaveBeenCalledWith('l-1', {
+      title: 'Updated',
+    });
 
     expect(result).toEqual({
       ...expectedLesson,
@@ -166,8 +155,8 @@ describe('LessonsController', () => {
   it('should delete a lesson', async () => {
     mockLessonsService.remove.mockResolvedValue(undefined);
 
-    await controller.remove('l-1', mockReq);
+    await controller.remove('l-1');
 
-    expect(mockLessonsService.remove).toHaveBeenCalledWith('l-1', expectedUser);
+    expect(mockLessonsService.remove).toHaveBeenCalledWith('l-1');
   });
 });

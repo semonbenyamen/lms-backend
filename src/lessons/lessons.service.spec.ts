@@ -1,8 +1,4 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { QueryFailedError } from 'typeorm';
@@ -78,14 +74,6 @@ describe('LessonsService', () => {
   });
 
   describe('create', () => {
-    const section = {
-      id: 'section-1',
-      course: {
-        instructorId: instructorUser.sub,
-        isPublished: true,
-      },
-    };
-
     const createDto = {
       title: 'Introduction to Services',
       orderIndex: 1,
@@ -93,9 +81,7 @@ describe('LessonsService', () => {
       difficulty: CourseDifficulty.BEGINNER,
     };
 
-    it('should allow course owner instructor to create a lesson', async () => {
-      mockSectionsService.findSectionWithCourse.mockResolvedValue(section);
-
+    it('should create a lesson in the section', async () => {
       const createdLesson = {
         id: 'l-1',
         sectionId: 'section-1',
@@ -105,11 +91,7 @@ describe('LessonsService', () => {
       mockLessonsRepo.create.mockReturnValue(createdLesson);
       mockLessonsRepo.save.mockResolvedValue(createdLesson);
 
-      const result = await service.create(
-        'section-1',
-        createDto,
-        instructorUser,
-      );
+      const result = await service.create('section-1', createDto);
 
       expect(mockLessonsRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -121,44 +103,7 @@ describe('LessonsService', () => {
       expect(result).toEqual(createdLesson);
     });
 
-    it('should allow admin to create a lesson', async () => {
-      mockSectionsService.findSectionWithCourse.mockResolvedValue(section);
-
-      const createdLesson = {
-        id: 'l-1',
-        sectionId: 'section-1',
-        ...createDto,
-      };
-
-      mockLessonsRepo.create.mockReturnValue(createdLesson);
-      mockLessonsRepo.save.mockResolvedValue(createdLesson);
-
-      const result = await service.create('section-1', createDto, adminUser);
-
-      expect(result).toEqual(createdLesson);
-    });
-
-    it('should forbid non-owner instructor from creating a lesson', async () => {
-      mockSectionsService.findSectionWithCourse.mockResolvedValue(section);
-
-      await expect(
-        service.create('section-1', createDto, otherInstructorUser),
-      ).rejects.toThrow(ForbiddenException);
-    });
-
-    it('should throw NotFoundException if section is not found', async () => {
-      mockSectionsService.findSectionWithCourse.mockRejectedValue(
-        new NotFoundException(),
-      );
-
-      await expect(
-        service.create('nonexistent-section', createDto, instructorUser),
-      ).rejects.toThrow(NotFoundException);
-    });
-
     it('should throw ConflictException if the orderIndex is taken', async () => {
-      mockSectionsService.findSectionWithCourse.mockResolvedValue(section);
-
       mockLessonsRepo.create.mockReturnValue({
         sectionId: 'section-1',
         ...createDto,
@@ -174,9 +119,9 @@ describe('LessonsService', () => {
         ),
       );
 
-      await expect(
-        service.create('section-1', createDto, instructorUser),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.create('section-1', createDto)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -335,15 +280,11 @@ describe('LessonsService', () => {
       },
     };
 
-    it('should allow course owner to update lesson', async () => {
+    it('should update the lesson with the given fields', async () => {
       mockLessonsRepo.findOne.mockResolvedValue({ ...lesson });
       mockLessonsRepo.save.mockImplementation((l) => Promise.resolve(l));
 
-      const updated = await service.update(
-        'lesson-1',
-        { title: 'New Title' },
-        instructorUser,
-      );
+      const updated = await service.update('lesson-1', { title: 'New Title' });
 
       expect(mockLessonsRepo.merge).toHaveBeenCalledWith(expect.anything(), {
         title: 'New Title',
@@ -352,12 +293,12 @@ describe('LessonsService', () => {
       expect(updated.title).toBe('New Title');
     });
 
-    it('should forbid other instructor from updating lesson', async () => {
-      mockLessonsRepo.findOne.mockResolvedValue({ ...lesson });
+    it('should throw NotFoundException when the lesson does not exist', async () => {
+      mockLessonsRepo.findOne.mockResolvedValue(null);
 
       await expect(
-        service.update('lesson-1', { title: 'New Title' }, otherInstructorUser),
-      ).rejects.toThrow(ForbiddenException);
+        service.update('unknown-id', { title: 'New Title' }),
+      ).rejects.toThrow(NotFoundException);
 
       expect(mockLessonsRepo.merge).not.toHaveBeenCalled();
     });
@@ -373,21 +314,21 @@ describe('LessonsService', () => {
       },
     };
 
-    it('should allow owner to delete lesson', async () => {
+    it('should soft delete the lesson', async () => {
       mockLessonsRepo.findOne.mockResolvedValue(lesson);
       mockLessonsRepo.softRemove.mockResolvedValue(undefined);
 
-      await service.remove('lesson-1', instructorUser);
+      await service.remove('lesson-1');
 
       expect(mockLessonsRepo.softRemove).toHaveBeenCalledWith(lesson);
     });
 
-    it('should forbid other instructor from deleting lesson', async () => {
-      mockLessonsRepo.findOne.mockResolvedValue(lesson);
+    it('should throw NotFoundException when the lesson does not exist', async () => {
+      mockLessonsRepo.findOne.mockResolvedValue(null);
 
-      await expect(
-        service.remove('lesson-1', otherInstructorUser),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.remove('unknown-id')).rejects.toThrow(
+        NotFoundException,
+      );
 
       expect(mockLessonsRepo.softRemove).not.toHaveBeenCalled();
     });
