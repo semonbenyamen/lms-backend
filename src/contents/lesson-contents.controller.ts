@@ -21,13 +21,16 @@ import { Roles } from '../auth/decorators/roles.decorator.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import type { AuthenticatedRequest } from '../auth/types/authenticated-request.type.js';
+import { ApiAuthErrorResponses } from '../common/decorators/api-error-responses.decorator.js';
 import { ApiSuccessResponse } from '../common/decorators/api-success-response.decorator.js';
+import { ApiResponseDto } from '../common/dto/api-response.dto.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
 import { ContentsService } from './contents.service.js';
 import { ContentItemResponseDto } from './dto/content-item-response.dto.js';
 import { CreateContentItemDto } from './dto/create-content-item.dto.js';
 import { ContentOwnershipGuard } from './guards/content-ownership.guard.js';
+import { toContentItemResponseDto } from './transformers/content-item-response.transformer.js';
 
 // Routes that need the parent lesson: create and list.
 @ApiTags('Contents')
@@ -41,28 +44,23 @@ export class LessonContentsController {
   @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add a content item to a lesson (Owner or Admin)' })
-  @ApiSuccessResponse(ContentItemResponseDto, HttpStatus.CREATED)
   @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: 'Invalid request body or UUID format',
+    status: HttpStatus.CREATED,
+    description: 'Content item created successfully',
+    type: ApiResponseDto,
   })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'Authentication required',
+  @ApiAuthErrorResponses({
+    [HttpStatus.BAD_REQUEST]:
+      'Invalid request body, UUID format or missing field of the content type',
+    [HttpStatus.FORBIDDEN]: 'Forbidden - not course owner or admin',
+    [HttpStatus.NOT_FOUND]: 'Lesson not found',
   })
-  @ApiResponse({
-    status: HttpStatus.FORBIDDEN,
-    description: 'Forbidden - not course owner or admin',
-  })
-  @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: 'Lesson not found',
-  })
-  create(
+  async create(
     @Param('lessonId', new ParseUUIDPipe()) lessonId: string,
     @Body() dto: CreateContentItemDto,
-  ) {
-    return this.contentsService.create(lessonId, dto);
+  ): Promise<void> {
+    // The content is read back with GET, so nothing is returned here.
+    await this.contentsService.create(lessonId, dto);
   }
 
   @Get()
@@ -70,27 +68,21 @@ export class LessonContentsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List all content items for a lesson' })
   @ApiSuccessResponse(ContentItemResponseDto, HttpStatus.OK, { isArray: true })
-  @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: 'Invalid UUID format',
+  @ApiAuthErrorResponses({
+    [HttpStatus.BAD_REQUEST]: 'Invalid UUID format',
+    [HttpStatus.NOT_FOUND]: 'Lesson not found or unpublished',
   })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'Authentication required',
-  })
-  @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: 'Lesson not found',
-  })
-  findByLesson(
+  async findByLesson(
     @Param('lessonId', new ParseUUIDPipe()) lessonId: string,
     @Req() request: AuthenticatedRequest,
     @Query() paginationQuery?: PaginationQueryDto,
-  ) {
-    return this.contentsService.findByLesson(
+  ): Promise<ContentItemResponseDto[]> {
+    const contentItems = await this.contentsService.findByLesson(
       lessonId,
       request.user,
       paginationQuery,
     );
+
+    return contentItems.map(toContentItemResponseDto);
   }
 }

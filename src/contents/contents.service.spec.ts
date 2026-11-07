@@ -78,16 +78,16 @@ describe('ContentsService', () => {
     };
 
     it('should create the content item in the given lesson', async () => {
-      const content = { id: 'ci-1', lessonId: 'l-1', ...dto };
+      const content = { lessonId: 'l-1', ...dto };
       mockContentItemsRepo.create.mockReturnValue(content);
-      mockContentItemsRepo.save.mockResolvedValue(content);
+      mockContentItemsRepo.save.mockResolvedValue({ id: 'ci-1', ...content });
 
-      const result = await service.create('l-1', dto);
+      await service.create('l-1', dto);
 
       expect(mockContentItemsRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({ lessonId: 'l-1', title: 'Video Lecture' }),
       );
-      expect(result).toEqual(content);
+      expect(mockContentItemsRepo.save).toHaveBeenCalledWith(content);
     });
 
     it('should reject content without the field of its type', async () => {
@@ -239,8 +239,11 @@ describe('ContentsService', () => {
       mockContentItemsRepo.findOne.mockResolvedValue({ ...content });
       mockContentItemsRepo.save.mockImplementation((c) => Promise.resolve(c));
 
-      const result = await service.update('ci-1', { title: 'New' });
-      expect(result.title).toBe('New');
+      await service.update('ci-1', { title: 'New' });
+
+      expect(mockContentItemsRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'ci-1', title: 'New' }),
+      );
     });
 
     it('should reject a type change without the field of the new type', async () => {
@@ -256,15 +259,17 @@ describe('ContentsService', () => {
       mockContentItemsRepo.findOne.mockResolvedValue({ ...content });
       mockContentItemsRepo.save.mockImplementation((c) => Promise.resolve(c));
 
-      const result = await service.update('ci-1', {
+      await service.update('ci-1', {
         contentType: ContentType.IMAGE,
         imageUrl: 'https://example.com/i.png',
       });
 
-      expect(result).toMatchObject({
-        bodyText: null,
-        imageUrl: 'https://example.com/i.png',
-      });
+      expect(mockContentItemsRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          bodyText: null,
+          imageUrl: 'https://example.com/i.png',
+        }),
+      );
     });
 
     it('should throw NotFoundException when the content item does not exist', async () => {

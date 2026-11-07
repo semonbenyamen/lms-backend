@@ -31,10 +31,7 @@ export class ContentsService {
   ) {}
 
   // Ownership of the lesson is verified by ContentOwnershipGuard before this runs.
-  async create(
-    lessonId: string,
-    dto: CreateContentItemDto,
-  ): Promise<ContentItem> {
+  async create(lessonId: string, dto: CreateContentItemDto): Promise<void> {
     this.assertTypeField(dto.contentType, dto);
 
     const contentItem = this.contentItemsRepository.create({
@@ -48,7 +45,7 @@ export class ContentsService {
       tags: dto.tags ?? [],
     });
 
-    return this.contentItemsRepository.save(contentItem);
+    await this.contentItemsRepository.save(contentItem);
   }
 
   async findById(
@@ -102,7 +99,7 @@ export class ContentsService {
   }
 
   // Ownership is verified by ContentOwnershipGuard before this runs.
-  async update(id: string, dto: UpdateContentItemDto): Promise<ContentItem> {
+  async update(id: string, dto: UpdateContentItemDto): Promise<void> {
     const contentItem = await this.findContentItemEntity(id);
 
     if (dto.title !== undefined) {
@@ -140,7 +137,7 @@ export class ContentsService {
       pickTypeFields(contentItem.contentType, contentItem),
     );
 
-    return this.contentItemsRepository.save(contentItem);
+    await this.contentItemsRepository.save(contentItem);
   }
 
   // Ownership is verified by ContentOwnershipGuard before this runs.

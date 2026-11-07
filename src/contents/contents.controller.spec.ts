@@ -49,18 +49,32 @@ describe('ContentsController', () => {
     controller = module.get<ContentsController>(ContentsController);
   });
 
-  it('should find content item by ID', async () => {
-    mockContentsService.findById.mockResolvedValue({ id: 'ci-1' });
+  it('should return the content item without internal relations', async () => {
+    mockContentsService.findById.mockResolvedValue({
+      id: 'ci-1',
+      lessonId: 'l-1',
+      lesson: { section: { course: { instructorId: 'instructor-1' } } },
+    });
 
     const result = await controller.findOne('ci-1', mockReq);
-    expect(result).toEqual({ id: 'ci-1' });
+
+    expect(mockContentsService.findById).toHaveBeenCalledWith(
+      'ci-1',
+      mockReq.user,
+    );
+    expect(result).toMatchObject({ id: 'ci-1', lessonId: 'l-1' });
+    expect(result).not.toHaveProperty('lesson');
   });
 
-  it('should update content item', async () => {
-    mockContentsService.update.mockResolvedValue({ id: 'ci-1', title: 'New' });
+  it('should update the content item without returning data', async () => {
+    mockContentsService.update.mockResolvedValue(undefined);
 
     const result = await controller.update('ci-1', { title: 'New' });
-    expect(result).toHaveProperty('title', 'New');
+
+    expect(mockContentsService.update).toHaveBeenCalledWith('ci-1', {
+      title: 'New',
+    });
+    expect(result).toBeUndefined();
   });
 
   it('should delete content item', async () => {

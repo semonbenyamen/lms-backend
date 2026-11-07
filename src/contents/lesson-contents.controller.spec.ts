@@ -56,15 +56,19 @@ describe('LessonContentsController', () => {
       videoUrl: 'https://example.com/v.mp4',
       orderIndex: 1,
     };
-    mockContentsService.create.mockResolvedValue({ id: 'ci-1', ...dto });
+    mockContentsService.create.mockResolvedValue(undefined);
 
-    await controller.create('l-1', dto);
+    const result = await controller.create('l-1', dto);
 
     expect(mockContentsService.create).toHaveBeenCalledWith('l-1', dto);
+    // Data is read back with GET, so create returns nothing.
+    expect(result).toBeUndefined();
   });
 
   it('should list the content items of the lesson', async () => {
-    mockContentsService.findByLesson.mockResolvedValue([{ id: 'ci-1' }]);
+    mockContentsService.findByLesson.mockResolvedValue([
+      { id: 'ci-1', lesson: { id: 'l-1' } },
+    ]);
 
     const result = await controller.findByLesson('l-1', mockReq);
 
@@ -73,6 +77,8 @@ describe('LessonContentsController', () => {
       mockReq.user,
       undefined,
     );
-    expect(result).toEqual([{ id: 'ci-1' }]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ id: 'ci-1' });
+    expect(result[0]).not.toHaveProperty('lesson');
   });
 });
