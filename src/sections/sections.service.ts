@@ -5,10 +5,12 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { JwtPayload } from '../auth/types/authenticated-request.type.js';
+
+import type { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { canReadCourse } from '../common/authorization/authorization.util.js';
 import { isUniqueViolation } from '../common/database/is-unique-violation.js';
 import { CoursesService } from '../courses/courses.service.js';
+import { Lesson } from '../lessons/entities/lesson.entity.js';
 import { CreateSectionDto } from './dto/create-section.dto.js';
 import { UpdateSectionDto } from './dto/update-section.dto.js';
 import { Section } from './entities/section.entity.js';
@@ -21,6 +23,10 @@ export class SectionsService {
   constructor(
     @InjectRepository(Section)
     private readonly sectionsRepository: Repository<Section>,
+
+    @InjectRepository(Lesson)
+    private readonly lessonsRepository: Repository<Lesson>,
+
     private readonly coursesService: CoursesService,
   ) {}
 
@@ -82,6 +88,17 @@ export class SectionsService {
 
   async remove(id: string): Promise<void> {
     const section = await this.findSectionWithCourse(id);
+
+    // Check for active lessons before deleting the section.
+    const lessonsCount = await this.lessonsRepository.count({
+      where: { sectionId: id },
+    });
+
+    if (lessonsCount > 0) {
+      throw new ConflictException(
+        'Cannot delete a section that contains lessons',
+      );
+    }
 
     await this.sectionsRepository.softRemove(section);
   }

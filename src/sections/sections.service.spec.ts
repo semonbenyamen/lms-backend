@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { CoursesService } from '../courses/courses.service.js';
+import { Lesson } from '../lessons/entities/lesson.entity.js';
 import { Section } from './entities/section.entity.js';
 import { SectionsService } from './sections.service.js';
 
@@ -20,6 +21,10 @@ describe('SectionsService', () => {
     find: vi.fn(),
     softRemove: vi.fn(),
     merge: vi.fn((section, dto) => Object.assign(section, dto)),
+  };
+
+  const mockLessonsRepo = {
+    count: vi.fn(),
   };
 
   const mockCoursesService = {
@@ -59,6 +64,10 @@ describe('SectionsService', () => {
         {
           provide: getRepositoryToken(Section),
           useValue: mockSectionsRepo,
+        },
+        {
+          provide: getRepositoryToken(Lesson),
+          useValue: mockLessonsRepo,
         },
         {
           provide: CoursesService,
@@ -309,13 +318,35 @@ describe('SectionsService', () => {
       },
     };
 
-    it('should remove an existing section', async () => {
+    it('should remove a section without lessons', async () => {
       mockSectionsRepo.findOne.mockResolvedValue(section);
+      mockLessonsRepo.count.mockResolvedValue(0);
       mockSectionsRepo.softRemove.mockResolvedValue(undefined);
 
       await service.remove('s-1');
 
+      // Verify that the service checks for active lessons.
+      expect(mockLessonsRepo.count).toHaveBeenCalledWith({
+        where: { sectionId: 's-1' },
+      });
+
+      // Allow deletion when no active lessons exist.
       expect(mockSectionsRepo.softRemove).toHaveBeenCalledWith(section);
+    });
+
+    it('should throw ConflictException if section contains lessons', async () => {
+      mockSectionsRepo.findOne.mockResolvedValue(section);
+      mockLessonsRepo.count.mockResolvedValue(2);
+
+      // Prevent deleting a section with active lessons.
+      await expect(service.remove('s-1')).rejects.toThrow(ConflictException);
+
+      expect(mockLessonsRepo.count).toHaveBeenCalledWith({
+        where: { sectionId: 's-1' },
+      });
+
+      // The section must not be deleted.
+      expect(mockSectionsRepo.softRemove).not.toHaveBeenCalled();
     });
   });
 });
