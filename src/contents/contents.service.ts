@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -8,8 +7,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
+import { canReadCourse } from '../common/authorization/authorization.util.js';
 import { ContentType } from '../common/enums/content-type.enum.js';
-import { UserRole } from '../common/enums/user-role.enum.js';
 import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
 import { getPaginationParams } from '../common/pagintion/pagination.util.js';
 import { Lesson } from '../lessons/entities/lesson.entity.js';
@@ -31,26 +30,11 @@ export class ContentsService {
     private readonly lessonsRepository: Repository<Lesson>,
   ) {}
 
+  // Ownership of the lesson is verified by ContentOwnershipGuard before this runs.
   async create(
     lessonId: string,
     dto: CreateContentItemDto,
-    user: JwtPayload,
   ): Promise<ContentItem> {
-    const lesson = await this.lessonsRepository.findOne({
-      where: { id: lessonId },
-      relations: { section: { course: true } },
-    });
-
-    if (!lesson || !lesson.section || !lesson.section.course) {
-      throw new NotFoundException(`Lesson with ID ${lessonId} not found`);
-    }
-
-    this.assertOwnershipOrAdmin(
-      lesson.section.course.instructorId,
-      user,
-      'create content in',
-    );
-
     this.assertTypeField(dto.contentType, dto);
 
     const contentItem = this.contentItemsRepository.create({
@@ -67,38 +51,18 @@ export class ContentsService {
     return this.contentItemsRepository.save(contentItem);
   }
 
-  async findById(id: string, user?: JwtPayload): Promise<ContentItem> {
+  async findById(
+    id: string,
+    user: Pick<JwtPayload, 'sub' | 'role'>,
+  ): Promise<ContentItem> {
     const contentItem = await this.contentItemsRepository.findOne({
       where: { id },
-      relations: {
-        lesson: {
-          section: {
-            course: true,
-          },
-        },
-      },
+      relations: { lesson: { section: { course: true } } },
     });
 
-    if (
-      !contentItem ||
-      !contentItem.lesson ||
-      !contentItem.lesson.section ||
-      !contentItem.lesson.section.course
-    ) {
-      throw new NotFoundException(`Content item with ID ${id} not found`);
-    }
-
-    const course = contentItem.lesson.section.course;
-    if (user) {
-      const isOwner =
-        user.role === UserRole.INSTRUCTOR &&
-        course.instructorId === user.sub;
-      const isAdmin = user.role === UserRole.ADMIN;
-
-      if (!course.isPublished && !isOwner && !isAdmin) {
-        throw new NotFoundException(`Content item with ID ${id} not found`);
-      }
-    } else if (!course.isPublished) {
+    // A draft course's content looks missing to users who cannot read it.
+    const course = contentItem?.lesson?.section?.course;
+    if (!contentItem || !course || !canReadCourse(course, user)) {
       throw new NotFoundException(`Content item with ID ${id} not found`);
     }
 
@@ -107,7 +71,7 @@ export class ContentsService {
 
   async findByLesson(
     lessonId: string,
-    user?: JwtPayload,
+    user: Pick<JwtPayload, 'sub' | 'role'>,
     paginationQuery?: PaginationQueryDto,
   ): Promise<ContentItem[]> {
     const lesson = await this.lessonsRepository.findOne({
@@ -115,21 +79,8 @@ export class ContentsService {
       relations: { section: { course: true } },
     });
 
-    if (!lesson || !lesson.section || !lesson.section.course) {
-      throw new NotFoundException(`Lesson with ID ${lessonId} not found`);
-    }
-
-    const course = lesson.section.course;
-    if (user) {
-      const isOwner =
-        user.role === UserRole.INSTRUCTOR &&
-        course.instructorId === user.sub;
-      const isAdmin = user.role === UserRole.ADMIN;
-
-      if (!course.isPublished && !isOwner && !isAdmin) {
-        throw new NotFoundException(`Lesson with ID ${lessonId} not found`);
-      }
-    } else if (!course.isPublished) {
+    const course = lesson?.section?.course;
+    if (!course || !canReadCourse(course, user)) {
       throw new NotFoundException(`Lesson with ID ${lessonId} not found`);
     }
 
@@ -150,17 +101,9 @@ export class ContentsService {
     return this.contentItemsRepository.find(findOptions);
   }
 
-  async update(
-    id: string,
-    dto: UpdateContentItemDto,
-    user: JwtPayload,
-  ): Promise<ContentItem> {
-    const contentItem = await this.findContentItemWithCourse(id);
-    this.assertOwnershipOrAdmin(
-      contentItem.lesson.section.course.instructorId,
-      user,
-      'update',
-    );
+  // Ownership is verified by ContentOwnershipGuard before this runs.
+  async update(id: string, dto: UpdateContentItemDto): Promise<ContentItem> {
+    const contentItem = await this.findContentItemEntity(id);
 
     if (dto.title !== undefined) {
       contentItem.title = dto.title;
@@ -200,35 +143,21 @@ export class ContentsService {
     return this.contentItemsRepository.save(contentItem);
   }
 
-  async remove(id: string, user: JwtPayload): Promise<void> {
-    const contentItem = await this.findContentItemWithCourse(id);
-    this.assertOwnershipOrAdmin(
-      contentItem.lesson.section.course.instructorId,
-      user,
-      'delete',
-    );
+  // Ownership is verified by ContentOwnershipGuard before this runs.
+  async remove(id: string): Promise<void> {
+    const contentItem = await this.findContentItemEntity(id);
 
     await this.contentItemsRepository.remove(contentItem);
   }
 
-  private async findContentItemWithCourse(id: string): Promise<ContentItem> {
+  // --- Helper Methods ---
+
+  private async findContentItemEntity(id: string): Promise<ContentItem> {
     const contentItem = await this.contentItemsRepository.findOne({
       where: { id },
-      relations: {
-        lesson: {
-          section: {
-            course: true,
-          },
-        },
-      },
     });
 
-    if (
-      !contentItem ||
-      !contentItem.lesson ||
-      !contentItem.lesson.section ||
-      !contentItem.lesson.section.course
-    ) {
+    if (!contentItem) {
       throw new NotFoundException(`Content item with ID ${id} not found`);
     }
 
@@ -243,22 +172,6 @@ export class ContentsService {
 
     if (error) {
       throw new BadRequestException(error);
-    }
-  }
-
-  private assertOwnershipOrAdmin(
-    instructorId: string,
-    user: JwtPayload,
-    action: string,
-  ): void {
-    const isAdmin = user.role === UserRole.ADMIN;
-    const isOwner =
-      user.role === UserRole.INSTRUCTOR && instructorId === user.sub;
-
-    if (!isAdmin && !isOwner) {
-      throw new ForbiddenException(
-        `You do not have permission to ${action} this content item`,
-      );
     }
   }
 }

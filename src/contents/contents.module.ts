@@ -6,12 +6,13 @@ import { Lesson } from '../lessons/entities/lesson.entity.js';
 import { ContentsController } from './contents.controller.js';
 import { ContentsService } from './contents.service.js';
 import { ContentItem } from './entities/content-item.entity.js';
+import { ContentOwnershipGuard } from './guards/content-ownership.guard.js';
 import { LessonContentsController } from './lesson-contents.controller.js';
 
 @Module({
   imports: [TypeOrmModule.forFeature([ContentItem, Lesson]), AuthModule],
   controllers: [LessonContentsController, ContentsController],
-  providers: [ContentsService],
+  providers: [ContentsService, ContentOwnershipGuard],
   exports: [ContentsService],
 })
 export class ContentsModule {}

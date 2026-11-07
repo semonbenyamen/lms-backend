@@ -27,6 +27,7 @@ import { UserRole } from '../common/enums/user-role.enum.js';
 import { ContentsService } from './contents.service.js';
 import { ContentItemResponseDto } from './dto/content-item-response.dto.js';
 import { UpdateContentItemDto } from './dto/update-content-item.dto.js';
+import { ContentOwnershipGuard } from './guards/content-ownership.guard.js';
 
 // Routes for one content item by its id: read, update and delete.
 @ApiTags('Contents')
@@ -59,7 +60,8 @@ export class ContentsController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  // Authenticate the user, check their role, then verify course ownership.
+  @UseGuards(JwtAuthGuard, RolesGuard, ContentOwnershipGuard)
   @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a content item (Owner or Admin)' })
@@ -83,14 +85,14 @@ export class ContentsController {
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateContentItemDto,
-    @Req() request: AuthenticatedRequest,
   ) {
-    return this.contentsService.update(id, dto, request.user);
+    return this.contentsService.update(id, dto);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  // Authenticate the user, check their role, then verify course ownership.
+  @UseGuards(JwtAuthGuard, RolesGuard, ContentOwnershipGuard)
   @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a content item (Owner or Admin)' })
@@ -114,10 +116,7 @@ export class ContentsController {
     status: HttpStatus.NOT_FOUND,
     description: 'Content item not found',
   })
-  remove(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    return this.contentsService.remove(id, request.user);
+  remove(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.contentsService.remove(id);
   }
 }

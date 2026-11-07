@@ -7,6 +7,7 @@ import type { AuthenticatedRequest } from '../auth/types/authenticated-request.t
 import { ContentType } from '../common/enums/content-type.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { ContentsService } from './contents.service.js';
+import { ContentOwnershipGuard } from './guards/content-ownership.guard.js';
 import { LessonContentsController } from './lesson-contents.controller.js';
 
 describe('LessonContentsController', () => {
@@ -41,6 +42,8 @@ describe('LessonContentsController', () => {
       .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
       .useValue({ canActivate: () => true })
+      .overrideGuard(ContentOwnershipGuard)
+      .useValue({ canActivate: () => true })
       .compile();
 
     controller = module.get<LessonContentsController>(LessonContentsController);
@@ -55,13 +58,9 @@ describe('LessonContentsController', () => {
     };
     mockContentsService.create.mockResolvedValue({ id: 'ci-1', ...dto });
 
-    await controller.create('l-1', dto, mockReq);
+    await controller.create('l-1', dto);
 
-    expect(mockContentsService.create).toHaveBeenCalledWith(
-      'l-1',
-      dto,
-      mockReq.user,
-    );
+    expect(mockContentsService.create).toHaveBeenCalledWith('l-1', dto);
   });
 
   it('should list the content items of the lesson', async () => {

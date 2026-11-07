@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -74,13 +70,6 @@ describe('ContentsService', () => {
   });
 
   describe('create', () => {
-    const lesson = {
-      id: 'l-1',
-      section: {
-        course: { instructorId: instructorUser.sub, isPublished: true },
-      },
-    };
-
     const dto = {
       title: 'Video Lecture',
       contentType: ContentType.VIDEO,
@@ -88,63 +77,41 @@ describe('ContentsService', () => {
       orderIndex: 1,
     };
 
-    it('should allow course owner to create content item', async () => {
-      mockLessonsRepo.findOne.mockResolvedValue(lesson);
+    it('should create the content item in the given lesson', async () => {
       const content = { id: 'ci-1', lessonId: 'l-1', ...dto };
       mockContentItemsRepo.create.mockReturnValue(content);
       mockContentItemsRepo.save.mockResolvedValue(content);
 
-      const result = await service.create('l-1', dto, instructorUser);
-      expect(result).toEqual(content);
-    });
+      const result = await service.create('l-1', dto);
 
-    it('should allow admin to create content item', async () => {
-      mockLessonsRepo.findOne.mockResolvedValue(lesson);
-      const content = { id: 'ci-1', lessonId: 'l-1', ...dto };
-      mockContentItemsRepo.create.mockReturnValue(content);
-      mockContentItemsRepo.save.mockResolvedValue(content);
-
-      const result = await service.create('l-1', dto, adminUser);
-      expect(result).toEqual(content);
-    });
-
-    it('should forbid other instructor from creating content item', async () => {
-      mockLessonsRepo.findOne.mockResolvedValue(lesson);
-
-      await expect(service.create('l-1', dto, otherInstructorUser)).rejects.toThrow(
-        ForbiddenException,
+      expect(mockContentItemsRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ lessonId: 'l-1', title: 'Video Lecture' }),
       );
+      expect(result).toEqual(content);
     });
 
     it('should reject content without the field of its type', async () => {
-      mockLessonsRepo.findOne.mockResolvedValue(lesson);
-
       await expect(
-        service.create(
-          'l-1',
-          { title: 'Image', contentType: ContentType.IMAGE, orderIndex: 2 },
-          instructorUser,
-        ),
+        service.create('l-1', {
+          title: 'Image',
+          contentType: ContentType.IMAGE,
+          orderIndex: 2,
+        }),
       ).rejects.toThrow(BadRequestException);
       expect(mockContentItemsRepo.save).not.toHaveBeenCalled();
     });
 
     it('should save only the fields of the content type', async () => {
-      mockLessonsRepo.findOne.mockResolvedValue(lesson);
       mockContentItemsRepo.create.mockImplementation((c) => c);
       mockContentItemsRepo.save.mockImplementation((c) => Promise.resolve(c));
 
-      await service.create(
-        'l-1',
-        {
-          title: 'Image',
-          contentType: ContentType.IMAGE,
-          imageUrl: 'https://example.com/i.png',
-          videoUrl: 'https://example.com/v.mp4',
-          orderIndex: 2,
-        },
-        instructorUser,
-      );
+      await service.create('l-1', {
+        title: 'Image',
+        contentType: ContentType.IMAGE,
+        imageUrl: 'https://example.com/i.png',
+        videoUrl: 'https://example.com/v.mp4',
+        orderIndex: 2,
+      });
 
       expect(mockContentItemsRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -152,14 +119,6 @@ describe('ContentsService', () => {
           videoUrl: null,
           imageUrl: 'https://example.com/i.png',
         }),
-      );
-    });
-
-    it('should throw NotFoundException if lesson not found', async () => {
-      mockLessonsRepo.findOne.mockResolvedValue(null);
-
-      await expect(service.create('unknown-l', dto, instructorUser)).rejects.toThrow(
-        NotFoundException,
       );
     });
   });
@@ -200,11 +159,69 @@ describe('ContentsService', () => {
       );
     });
 
-    it('should return draft content to owner instructor', async () => {
+    it('should throw NotFoundException to another instructor for draft content', async () => {
       mockContentItemsRepo.findOne.mockResolvedValue(draftContent);
 
-      const result = await service.findById('ci-2', instructorUser);
-      expect(result).toEqual(draftContent);
+      await expect(
+        service.findById('ci-2', otherInstructorUser),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should return draft content to the owner and to admins', async () => {
+      mockContentItemsRepo.findOne.mockResolvedValue(draftContent);
+
+      await expect(service.findById('ci-2', instructorUser)).resolves.toEqual(
+        draftContent,
+      );
+      await expect(service.findById('ci-2', adminUser)).resolves.toEqual(
+        draftContent,
+      );
+    });
+
+    it('should throw NotFoundException when the course was soft deleted', async () => {
+      mockContentItemsRepo.findOne.mockResolvedValue({
+        ...publishedContent,
+        lesson: { section: { course: null } },
+      });
+
+      await expect(service.findById('ci-1', adminUser)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('findByLesson', () => {
+    const lesson = {
+      id: 'l-1',
+      section: {
+        course: { instructorId: instructorUser.sub, isPublished: false },
+      },
+    };
+
+    it('should list the content of a draft lesson for its owner', async () => {
+      mockLessonsRepo.findOne.mockResolvedValue(lesson);
+      mockContentItemsRepo.find.mockResolvedValue([{ id: 'ci-1' }]);
+
+      const result = await service.findByLesson('l-1', instructorUser);
+
+      expect(result).toEqual([{ id: 'ci-1' }]);
+    });
+
+    it('should throw NotFoundException to student for a draft lesson', async () => {
+      mockLessonsRepo.findOne.mockResolvedValue(lesson);
+
+      await expect(service.findByLesson('l-1', studentUser)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(mockContentItemsRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException when the lesson does not exist', async () => {
+      mockLessonsRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.findByLesson('missing', instructorUser),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -216,18 +233,13 @@ describe('ContentsService', () => {
       bodyText: 'Old text',
       videoUrl: null,
       imageUrl: null,
-      lesson: {
-        section: {
-          course: { instructorId: instructorUser.sub },
-        },
-      },
     };
 
-    it('should allow owner to update content item', async () => {
+    it('should update the provided fields', async () => {
       mockContentItemsRepo.findOne.mockResolvedValue({ ...content });
       mockContentItemsRepo.save.mockImplementation((c) => Promise.resolve(c));
 
-      const result = await service.update('ci-1', { title: 'New' }, instructorUser);
+      const result = await service.update('ci-1', { title: 'New' });
       expect(result.title).toBe('New');
     });
 
@@ -235,7 +247,7 @@ describe('ContentsService', () => {
       mockContentItemsRepo.findOne.mockResolvedValue({ ...content });
 
       await expect(
-        service.update('ci-1', { contentType: ContentType.VIDEO }, instructorUser),
+        service.update('ci-1', { contentType: ContentType.VIDEO }),
       ).rejects.toThrow(BadRequestException);
       expect(mockContentItemsRepo.save).not.toHaveBeenCalled();
     });
@@ -244,14 +256,10 @@ describe('ContentsService', () => {
       mockContentItemsRepo.findOne.mockResolvedValue({ ...content });
       mockContentItemsRepo.save.mockImplementation((c) => Promise.resolve(c));
 
-      const result = await service.update(
-        'ci-1',
-        {
-          contentType: ContentType.IMAGE,
-          imageUrl: 'https://example.com/i.png',
-        },
-        instructorUser,
-      );
+      const result = await service.update('ci-1', {
+        contentType: ContentType.IMAGE,
+        imageUrl: 'https://example.com/i.png',
+      });
 
       expect(result).toMatchObject({
         bodyText: null,
@@ -259,30 +267,23 @@ describe('ContentsService', () => {
       });
     });
 
-    it('should forbid other instructor from updating content item', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue({ ...content });
+    it('should throw NotFoundException when the content item does not exist', async () => {
+      mockContentItemsRepo.findOne.mockResolvedValue(null);
 
-      await expect(
-        service.update('ci-1', { title: 'New' }, otherInstructorUser),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.update('missing', { title: 'New' })).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(mockContentItemsRepo.save).not.toHaveBeenCalled();
     });
   });
 
   describe('remove', () => {
-    const content = {
-      id: 'ci-1',
-      lesson: {
-        section: {
-          course: { instructorId: instructorUser.sub },
-        },
-      },
-    };
-
-    it('should allow owner to remove content item', async () => {
+    it('should remove the content item', async () => {
+      const content = { id: 'ci-1' };
       mockContentItemsRepo.findOne.mockResolvedValue(content);
       mockContentItemsRepo.remove.mockResolvedValue(undefined);
 
-      await service.remove('ci-1', instructorUser);
+      await service.remove('ci-1');
       expect(mockContentItemsRepo.remove).toHaveBeenCalledWith(content);
     });
   });

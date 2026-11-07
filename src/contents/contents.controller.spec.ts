@@ -7,6 +7,7 @@ import type { AuthenticatedRequest } from '../auth/types/authenticated-request.t
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { ContentsController } from './contents.controller.js';
 import { ContentsService } from './contents.service.js';
+import { ContentOwnershipGuard } from './guards/content-ownership.guard.js';
 
 describe('ContentsController', () => {
   let controller: ContentsController;
@@ -41,6 +42,8 @@ describe('ContentsController', () => {
       .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
       .useValue({ canActivate: () => true })
+      .overrideGuard(ContentOwnershipGuard)
+      .useValue({ canActivate: () => true })
       .compile();
 
     controller = module.get<ContentsController>(ContentsController);
@@ -56,14 +59,14 @@ describe('ContentsController', () => {
   it('should update content item', async () => {
     mockContentsService.update.mockResolvedValue({ id: 'ci-1', title: 'New' });
 
-    const result = await controller.update('ci-1', { title: 'New' }, mockReq);
+    const result = await controller.update('ci-1', { title: 'New' });
     expect(result).toHaveProperty('title', 'New');
   });
 
   it('should delete content item', async () => {
     mockContentsService.remove.mockResolvedValue(undefined);
 
-    await controller.remove('ci-1', mockReq);
-    expect(mockContentsService.remove).toHaveBeenCalledWith('ci-1', mockReq.user);
+    await controller.remove('ci-1');
+    expect(mockContentsService.remove).toHaveBeenCalledWith('ci-1');
   });
 });

@@ -27,6 +27,7 @@ import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto
 import { ContentsService } from './contents.service.js';
 import { ContentItemResponseDto } from './dto/content-item-response.dto.js';
 import { CreateContentItemDto } from './dto/create-content-item.dto.js';
+import { ContentOwnershipGuard } from './guards/content-ownership.guard.js';
 
 // Routes that need the parent lesson: create and list.
 @ApiTags('Contents')
@@ -35,7 +36,8 @@ export class LessonContentsController {
   constructor(private readonly contentsService: ContentsService) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  // Authenticate the user, check their role, then verify course ownership.
+  @UseGuards(JwtAuthGuard, RolesGuard, ContentOwnershipGuard)
   @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add a content item to a lesson (Owner or Admin)' })
@@ -59,9 +61,8 @@ export class LessonContentsController {
   create(
     @Param('lessonId', new ParseUUIDPipe()) lessonId: string,
     @Body() dto: CreateContentItemDto,
-    @Req() request: AuthenticatedRequest,
   ) {
-    return this.contentsService.create(lessonId, dto, request.user);
+    return this.contentsService.create(lessonId, dto);
   }
 
   @Get()
