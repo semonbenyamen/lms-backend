@@ -52,6 +52,7 @@ export class LessonContentsController {
       'Invalid request body, UUID format or missing field of the content type',
     [HttpStatus.FORBIDDEN]: 'Forbidden - not course owner or admin',
     [HttpStatus.NOT_FOUND]: 'Lesson not found',
+    [HttpStatus.CONFLICT]: 'orderIndex is already used in this lesson',
   })
   async create(
     @Param('lessonId', new ParseUUIDPipe()) lessonId: string,

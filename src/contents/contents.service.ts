@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -8,6 +9,7 @@ import { Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { canReadCourse } from '../common/authorization/authorization.util.js';
+import { isUniqueViolation } from '../common/database/is-unique-violation.js';
 import { ContentType } from '../common/enums/content-type.enum.js';
 import { Lesson } from '../lessons/entities/lesson.entity.js';
 import {
@@ -38,7 +40,7 @@ export class ContentsService {
       ...pickTypeFields(dto.contentType, dto),
     });
 
-    await this.contentItemsRepository.save(contentItem);
+    await this.saveContentItem(contentItem);
   }
 
   async findById(
@@ -94,17 +96,32 @@ export class ContentsService {
       pickTypeFields(contentItem.contentType, contentItem),
     );
 
-    await this.contentItemsRepository.save(contentItem);
+    await this.saveContentItem(contentItem);
   }
 
   // Ownership is verified by ContentOwnershipGuard before this runs.
   async remove(id: string): Promise<void> {
     const contentItem = await this.findContentItemEntity(id);
 
-    await this.contentItemsRepository.remove(contentItem);
+    // Preserve the record instead of permanently deleting it.
+    await this.contentItemsRepository.softRemove(contentItem);
   }
 
   // --- Helper Methods ---
+
+  // order_index is unique per lesson, so a clash is a 409, not a 500.
+  private async saveContentItem(contentItem: ContentItem): Promise<void> {
+    try {
+      await this.contentItemsRepository.save(contentItem);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(
+          `Another content item in this lesson already uses orderIndex ${contentItem.orderIndex}`,
+        );
+      }
+      throw error;
+    }
+  }
 
   private async findContentItemEntity(id: string): Promise<ContentItem> {
     const contentItem = await this.contentItemsRepository.findOne({

@@ -1,6 +1,11 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { QueryFailedError } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
@@ -21,7 +26,7 @@ describe('ContentsService', () => {
     ),
     findOne: vi.fn(),
     find: vi.fn(),
-    remove: vi.fn(),
+    softRemove: vi.fn(),
   };
 
   const mockLessonsRepo = {
@@ -124,7 +129,23 @@ describe('ContentsService', () => {
         }),
       );
     });
+
+    it('should return 409 when the orderIndex is already used in the lesson', async () => {
+      mockContentItemsRepo.create.mockImplementation((c) => c);
+      mockContentItemsRepo.save.mockRejectedValue(duplicateOrderError);
+
+      await expect(service.create('l-1', dto)).rejects.toThrow(
+        ConflictException,
+      );
+    });
   });
+
+  // What Postgres raises when the unique orderIndex index is broken.
+  const duplicateOrderError = new QueryFailedError(
+    'INSERT',
+    [],
+    Object.assign(new Error('duplicate key'), { code: '23505' }),
+  );
 
   describe('findById', () => {
     const publishedContent = {
@@ -280,6 +301,15 @@ describe('ContentsService', () => {
       );
     });
 
+    it('should return 409 when moving to an orderIndex already in use', async () => {
+      mockContentItemsRepo.findOne.mockResolvedValue({ ...content });
+      mockContentItemsRepo.save.mockRejectedValue(duplicateOrderError);
+
+      await expect(service.update('ci-1', { orderIndex: 2 })).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
     it('should throw NotFoundException when the content item does not exist', async () => {
       mockContentItemsRepo.findOne.mockResolvedValue(null);
 
@@ -291,13 +321,20 @@ describe('ContentsService', () => {
   });
 
   describe('remove', () => {
-    it('should remove the content item', async () => {
+    it('should soft delete the content item', async () => {
       const content = { id: 'ci-1' };
       mockContentItemsRepo.findOne.mockResolvedValue(content);
-      mockContentItemsRepo.remove.mockResolvedValue(undefined);
+      mockContentItemsRepo.softRemove.mockResolvedValue(undefined);
 
       await service.remove('ci-1');
-      expect(mockContentItemsRepo.remove).toHaveBeenCalledWith(content);
+      expect(mockContentItemsRepo.softRemove).toHaveBeenCalledWith(content);
+    });
+
+    it('should throw NotFoundException when the content item does not exist', async () => {
+      mockContentItemsRepo.findOne.mockResolvedValue(null);
+
+      await expect(service.remove('missing')).rejects.toThrow(NotFoundException);
+      expect(mockContentItemsRepo.softRemove).not.toHaveBeenCalled();
     });
   });
 });

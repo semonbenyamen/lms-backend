@@ -74,6 +74,7 @@ export class ContentsController {
       'Invalid request body, UUID format or missing field of the content type',
     [HttpStatus.FORBIDDEN]: NOT_COURSE_OWNER,
     [HttpStatus.NOT_FOUND]: 'Content item not found',
+    [HttpStatus.CONFLICT]: 'orderIndex is already used in this lesson',
   })
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -91,7 +92,7 @@ export class ContentsController {
   @ApiOperation({ summary: 'Delete a content item (Owner or Admin)' })
   @ApiResponse({
     status: HttpStatus.NO_CONTENT,
-    description: 'Content item deleted successfully',
+    description: 'Content item soft deleted successfully',
   })
   @ApiAuthErrorResponses({
     [HttpStatus.BAD_REQUEST]: 'Invalid UUID format',

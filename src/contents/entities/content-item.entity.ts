@@ -1,12 +1,12 @@
 import {
   Column,
   CreateDateColumn,
+  DeleteDateColumn,
   Entity,
   Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
-  Unique,
   UpdateDateColumn,
 } from 'typeorm';
 import type { Relation } from 'typeorm';
@@ -15,7 +15,11 @@ import { ContentType } from '../../common/enums/content-type.enum.js';
 import { Lesson } from '../../lessons/entities/lesson.entity.js';
 
 @Entity('content_items')
-@Unique('UQ_content_items_lesson_order', ['lessonId', 'orderIndex'])
+// Unique among non-deleted items, so a deleted item frees its order.
+@Index('UQ_content_items_lesson_order', ['lessonId', 'orderIndex'], {
+  unique: true,
+  where: '"deleted_at" IS NULL',
+})
 export class ContentItem {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -62,11 +66,12 @@ export class ContentItem {
   @Column('text', { array: true, default: '{}' })
   tags: string[];
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
-}
 
-export { ContentItem as Content };
+  @DeleteDateColumn({ name: 'deleted_at', type: 'timestamptz', nullable: true })
+  deletedAt: Date | null;
+}
