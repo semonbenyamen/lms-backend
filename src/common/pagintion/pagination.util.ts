@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { PaginationMetaDto } from './dto/pagination-meta.dto.js';
 import { PaginationQueryDto } from './dto/pagination-query.dto.js';
 
 export interface PaginationParams {
@@ -8,32 +8,24 @@ export interface PaginationParams {
   take: number;
 }
 
-export function getPaginationParams(
-  paginationQuery?: PaginationQueryDto,
-): PaginationParams {
-  const rawPage = paginationQuery?.page;
-  const rawLimit = paginationQuery?.limit;
+export interface PaginatedResult<T> {
+  items: T[];
+  meta: PaginationMetaDto;
+}
 
-  if (rawPage !== undefined && rawPage < 1) {
-    throw new BadRequestException('Page must be greater than or equal to 1');
-  }
-  if (rawLimit !== undefined && rawLimit < 1) {
-    throw new BadRequestException('Limit must be greater than or equal to 1');
-  }
-
-  const page = Math.max(1, rawPage ?? 1);
-  const limit = Math.min(100, Math.max(1, rawLimit ?? 10));
-  const skip = (page - 1) * limit;
-  const take = limit;
-
-  return { page, limit, skip, take };
+// The limits are validated by PaginationQueryDto before this runs.
+export function getPaginationParams({
+  page = 1,
+  limit = 10,
+}: PaginationQueryDto = {}): PaginationParams {
+  return { page, limit, skip: (page - 1) * limit, take: limit };
 }
 
 export function getPaginationMeta(
   total: number,
   page: number,
   limit: number,
-) {
+): PaginationMetaDto {
   const totalPages = Math.ceil(total / limit);
 
   return {

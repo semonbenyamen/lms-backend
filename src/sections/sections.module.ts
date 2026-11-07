@@ -7,11 +7,12 @@ import { CourseSectionsController } from './course-sections.controller.js';
 import { Section } from './entities/section.entity.js';
 import { SectionsController } from './sections.controller.js';
 import { SectionsService } from './sections.service.js';
+import { SectionOwnershipGuard } from './guards/section-ownership.guard.js';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Section]), AuthModule, CoursesModule],
   controllers: [CourseSectionsController, SectionsController],
-  providers: [SectionsService],
+  providers: [SectionsService, SectionOwnershipGuard],
   exports: [SectionsService],
 })
 export class SectionsModule {}

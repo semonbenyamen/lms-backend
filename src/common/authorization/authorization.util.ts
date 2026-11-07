@@ -1,21 +1,10 @@
 import { ForbiddenException } from '@nestjs/common';
-import { JwtPayload } from '../../auth/types/authenticated-request.type.js';
-import { Course } from '../../courses/entities/course.entity.js';
+import type { JwtPayload } from '../../auth/types/authenticated-request.type.js';
+import type { Course } from '../../courses/entities/course.entity.js';
 import { UserRole } from '../enums/user-role.enum.js';
 
-export function isAdminOrInstructor(role: UserRole): boolean {
-  return role === UserRole.ADMIN || role === UserRole.INSTRUCTOR;
-}
-
-export function assertAdminOrInstructor(role: UserRole): void {
-  if (!isAdminOrInstructor(role)) {
-    throw new ForbiddenException(
-      'Only admins and instructors can perform this action',
-    );
-  }
-}
-
-// Published courses are open to all users, drafts only to the owner and admins.
+// Published courses are visible to everyone.
+// Draft courses are visible only to their owner and admins.
 export function canReadCourse(
   course: Pick<Course, 'isPublished' | 'instructorId'>,
   user: Pick<JwtPayload, 'sub' | 'role'>,

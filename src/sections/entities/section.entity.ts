@@ -51,5 +51,3 @@ export class Section {
   @DeleteDateColumn({ name: 'deleted_at', type: 'timestamptz', nullable: true })
   deletedAt: Date | null;
 }
-
-export { Section as CourseSection };

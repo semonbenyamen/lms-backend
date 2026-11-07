@@ -43,7 +43,7 @@ export class CreateCourseDto {
 
   @ApiProperty({
     example: '550e8400-e29b-41d4-a716-446655440010',
-    description: 'One of the categories from GET /categories',
+    description: 'One of the categories from GET /dashboard/categories',
   })
   @IsUUID()
   categoryId: string;
@@ -58,24 +58,21 @@ export class CreateCourseDto {
   @ArrayNotEmpty({ message: 'Topics must contain at least one topic' })
   topics: string[];
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     enum: CourseDifficulty,
     example: CourseDifficulty.INTERMEDIATE,
     description: 'Difficulty level of the course',
   })
-  @IsOptional()
   @IsEnum(CourseDifficulty)
-  difficulty?: CourseDifficulty;
+  difficulty: CourseDifficulty;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     enum: CourseLanguage,
     example: CourseLanguage.ENGLISH,
     description: 'Language of instruction',
-    default: CourseLanguage.ENGLISH,
   })
-  @IsOptional()
   @IsEnum(CourseLanguage)
-  language?: CourseLanguage;
+  language: CourseLanguage;
 
   @ApiPropertyOptional({
     example: ['Basic TypeScript', 'Node.js fundamentals'],

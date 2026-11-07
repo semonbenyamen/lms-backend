@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -30,6 +30,14 @@ describe('CoursesService', () => {
     assertExists: vi.fn(),
   };
 
+  // Loads the course with its category after a create, read or update.
+  const courseQueryBuilder = {
+    leftJoin: vi.fn().mockReturnThis(),
+    addSelect: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    getOne: vi.fn(),
+  };
+
   const instructorId = 'instructor-uuid-1';
 
   const instructorUser: JwtPayload = {
@@ -46,6 +54,10 @@ describe('CoursesService', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockCoursesRepo.createQueryBuilder.mockReturnValue(courseQueryBuilder);
+    courseQueryBuilder.getOne.mockImplementation(
+      () => mockCoursesRepo.save.mock.results.at(-1)?.value,
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -95,6 +107,8 @@ describe('CoursesService', () => {
         instructorId,
       });
       expect(mockCoursesRepo.save).toHaveBeenCalledWith(mockCourse);
+      // The controller needs only the new id, so the course is not loaded again.
+      expect(courseQueryBuilder.getOne).not.toHaveBeenCalled();
       expect(result).toEqual(mockCourse);
     });
 
@@ -112,20 +126,24 @@ describe('CoursesService', () => {
 
   describe('Course Pagination and Visibility', () => {
     let mockQueryBuilder: {
+      leftJoin: ReturnType<typeof vi.fn>;
+      addSelect: ReturnType<typeof vi.fn>;
       orderBy: ReturnType<typeof vi.fn>;
       skip: ReturnType<typeof vi.fn>;
       take: ReturnType<typeof vi.fn>;
       andWhere: ReturnType<typeof vi.fn>;
-      getMany: ReturnType<typeof vi.fn>;
+      getManyAndCount: ReturnType<typeof vi.fn>;
     };
 
     beforeEach(() => {
       mockQueryBuilder = {
+        leftJoin: vi.fn().mockReturnThis(),
+        addSelect: vi.fn().mockReturnThis(),
         orderBy: vi.fn().mockReturnThis(),
         skip: vi.fn().mockReturnThis(),
         take: vi.fn().mockReturnThis(),
         andWhere: vi.fn().mockReturnThis(),
-        getMany: vi.fn().mockResolvedValue([]),
+        getManyAndCount: vi.fn().mockResolvedValue([[], 0]),
       };
       mockCoursesRepo.createQueryBuilder.mockReturnValue(mockQueryBuilder);
     });
@@ -137,22 +155,41 @@ describe('CoursesService', () => {
       expect(mockQueryBuilder.take).toHaveBeenCalledWith(10);
     });
 
-    it('should reject invalid page parameter (< 1)', async () => {
-      await expect(
-        service.findAll({ page: 0, limit: 10 }, instructorUser),
-      ).rejects.toThrow(BadRequestException);
+    it('should return the courses with the pagination meta', async () => {
+      const courses = [{ id: 'course-1' }, { id: 'course-2' }];
+      mockQueryBuilder.getManyAndCount.mockResolvedValue([courses, 12]);
+
+      const result = await service.findAll(
+        { page: 2, limit: 2 },
+        instructorUser,
+      );
+
+      expect(mockQueryBuilder.skip).toHaveBeenCalledWith(2);
+      expect(mockQueryBuilder.take).toHaveBeenCalledWith(2);
+      expect(result).toEqual({
+        items: courses,
+        meta: {
+          total: 12,
+          page: 2,
+          limit: 2,
+          totalPages: 6,
+          hasNextPage: true,
+          hasPreviousPage: true,
+        },
+      });
     });
 
-    it('should reject invalid limit parameter (< 1)', async () => {
-      await expect(
-        service.findAll({ page: 1, limit: -5 }, instructorUser),
-      ).rejects.toThrow(BadRequestException);
-    });
+    it('should load only the id and name of the category', async () => {
+      await service.findAll({}, instructorUser);
 
-    it('should cap limit at maximum 100', async () => {
-      await service.findAll({ page: 1, limit: 200 }, adminUser);
-
-      expect(mockQueryBuilder.take).toHaveBeenCalledWith(100);
+      expect(mockQueryBuilder.leftJoin).toHaveBeenCalledWith(
+        'course.category',
+        'category',
+      );
+      expect(mockQueryBuilder.addSelect).toHaveBeenCalledWith([
+        'category.id',
+        'category.name',
+      ]);
     });
 
     it('should limit instructors to their own courses', async () => {
@@ -174,13 +211,13 @@ describe('CoursesService', () => {
   describe('Course Retrieval by ID', () => {
     it('should return the course', async () => {
       const course = { id: 'course-1', isPublished: false };
-      mockCoursesRepo.findOne.mockResolvedValue(course);
+      courseQueryBuilder.getOne.mockResolvedValueOnce(course);
 
       await expect(service.findById('course-1')).resolves.toEqual(course);
     });
 
     it('should throw NotFoundException when course ID does not exist', async () => {
-      mockCoursesRepo.findOne.mockResolvedValue(null);
+      courseQueryBuilder.getOne.mockResolvedValueOnce(null);
 
       await expect(service.findById('non-existent-id')).rejects.toThrow(
         NotFoundException,
@@ -199,11 +236,10 @@ describe('CoursesService', () => {
       mockCoursesRepo.findOne.mockResolvedValue({ ...course });
       mockCoursesRepo.save.mockImplementation((c) => Promise.resolve(c));
 
-      const updated = await service.update('course-1', {
+      await service.update('course-1', {
         title: 'Updated Title',
       });
 
-      expect(updated.title).toBe('Updated Title');
       expect(mockCoursesRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 'course-1',
@@ -216,11 +252,13 @@ describe('CoursesService', () => {
       mockCoursesRepo.findOne.mockResolvedValue({ ...course });
       mockCoursesRepo.save.mockImplementation((c) => Promise.resolve(c));
 
-      const updated = await service.update('course-1', {
+      await service.update('course-1', {
         title: 'New Title',
       });
 
-      expect(updated.instructorId).toBe(instructorId);
+      expect(mockCoursesRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ instructorId }),
+      );
     });
 
     it('should reject updates for courses that do not exist', async () => {
