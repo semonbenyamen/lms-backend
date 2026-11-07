@@ -16,6 +16,9 @@ describe('ContentsService', () => {
   const mockContentItemsRepo = {
     create: vi.fn(),
     save: vi.fn(),
+    merge: vi.fn((contentItem: object, changes: object) =>
+      Object.assign(contentItem, changes),
+    ),
     findOne: vi.fn(),
     find: vi.fn(),
     remove: vi.fn(),
@@ -205,6 +208,11 @@ describe('ContentsService', () => {
       const result = await service.findByLesson('l-1', instructorUser);
 
       expect(result).toEqual([{ id: 'ci-1' }]);
+      // All items are returned in order, without pagination.
+      expect(mockContentItemsRepo.find).toHaveBeenCalledWith({
+        where: { lessonId: 'l-1' },
+        order: { orderIndex: 'ASC' },
+      });
     });
 
     it('should throw NotFoundException to student for a draft lesson', async () => {

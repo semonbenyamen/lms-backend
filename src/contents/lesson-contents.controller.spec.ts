@@ -75,7 +75,6 @@ describe('LessonContentsController', () => {
     expect(mockContentsService.findByLesson).toHaveBeenCalledWith(
       'l-1',
       mockReq.user,
-      undefined,
     );
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ id: 'ci-1' });

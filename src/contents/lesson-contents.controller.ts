@@ -6,7 +6,6 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
-  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -25,7 +24,6 @@ import { ApiAuthErrorResponses } from '../common/decorators/api-error-responses.
 import { ApiSuccessResponse } from '../common/decorators/api-success-response.decorator.js';
 import { ApiResponseDto } from '../common/dto/api-response.dto.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
-import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
 import { ContentsService } from './contents.service.js';
 import { ContentItemResponseDto } from './dto/content-item-response.dto.js';
 import { CreateContentItemDto } from './dto/create-content-item.dto.js';
@@ -75,12 +73,10 @@ export class LessonContentsController {
   async findByLesson(
     @Param('lessonId', new ParseUUIDPipe()) lessonId: string,
     @Req() request: AuthenticatedRequest,
-    @Query() paginationQuery?: PaginationQueryDto,
   ): Promise<ContentItemResponseDto[]> {
     const contentItems = await this.contentsService.findByLesson(
       lessonId,
       request.user,
-      paginationQuery,
     );
 
     return contentItems.map(toContentItemResponseDto);

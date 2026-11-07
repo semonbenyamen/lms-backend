@@ -9,6 +9,7 @@ import {
   IsString,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 
 import { ContentType } from '../../common/enums/content-type.enum.js';
@@ -102,7 +103,8 @@ export class CreateContentItemDto {
     description: 'Tags associated with the content item',
     type: [String],
   })
-  @IsOptional()
+  // tags cannot be null in the database, so null is rejected instead of skipped.
+  @ValidateIf((_, value) => value !== undefined)
   @IsArray()
   @IsString({ each: true })
   tags?: string[];

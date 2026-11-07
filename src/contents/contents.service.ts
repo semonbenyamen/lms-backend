@@ -4,13 +4,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindManyOptions, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { canReadCourse } from '../common/authorization/authorization.util.js';
 import { ContentType } from '../common/enums/content-type.enum.js';
-import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
-import { getPaginationParams } from '../common/pagintion/pagination.util.js';
 import { Lesson } from '../lessons/entities/lesson.entity.js';
 import {
   getTypeFieldError,
@@ -35,14 +33,9 @@ export class ContentsService {
     this.assertTypeField(dto.contentType, dto);
 
     const contentItem = this.contentItemsRepository.create({
+      ...dto,
       lessonId,
-      title: dto.title,
-      contentType: dto.contentType,
       ...pickTypeFields(dto.contentType, dto),
-      durationSeconds: dto.durationSeconds ?? null,
-      language: dto.language ?? null,
-      orderIndex: dto.orderIndex,
-      tags: dto.tags ?? [],
     });
 
     await this.contentItemsRepository.save(contentItem);
@@ -69,7 +62,6 @@ export class ContentsService {
   async findByLesson(
     lessonId: string,
     user: Pick<JwtPayload, 'sub' | 'role'>,
-    paginationQuery?: PaginationQueryDto,
   ): Promise<ContentItem[]> {
     const lesson = await this.lessonsRepository.findOne({
       where: { id: lessonId },
@@ -81,54 +73,19 @@ export class ContentsService {
       throw new NotFoundException(`Lesson with ID ${lessonId} not found`);
     }
 
-    const findOptions: FindManyOptions<ContentItem> = {
+    // A lesson has few items, so they are returned in one ordered list.
+    return this.contentItemsRepository.find({
       where: { lessonId },
       order: { orderIndex: 'ASC' },
-    };
-
-    if (
-      paginationQuery?.page !== undefined ||
-      paginationQuery?.limit !== undefined
-    ) {
-      const { skip, take } = getPaginationParams(paginationQuery);
-      findOptions.skip = skip;
-      findOptions.take = take;
-    }
-
-    return this.contentItemsRepository.find(findOptions);
+    });
   }
 
   // Ownership is verified by ContentOwnershipGuard before this runs.
   async update(id: string, dto: UpdateContentItemDto): Promise<void> {
     const contentItem = await this.findContentItemEntity(id);
 
-    if (dto.title !== undefined) {
-      contentItem.title = dto.title;
-    }
-    if (dto.contentType !== undefined) {
-      contentItem.contentType = dto.contentType;
-    }
-    if (dto.bodyText !== undefined) {
-      contentItem.bodyText = dto.bodyText;
-    }
-    if (dto.videoUrl !== undefined) {
-      contentItem.videoUrl = dto.videoUrl;
-    }
-    if (dto.imageUrl !== undefined) {
-      contentItem.imageUrl = dto.imageUrl;
-    }
-    if (dto.durationSeconds !== undefined) {
-      contentItem.durationSeconds = dto.durationSeconds;
-    }
-    if (dto.language !== undefined) {
-      contentItem.language = dto.language;
-    }
-    if (dto.orderIndex !== undefined) {
-      contentItem.orderIndex = dto.orderIndex;
-    }
-    if (dto.tags !== undefined) {
-      contentItem.tags = dto.tags;
-    }
+    // Apply only the fields provided in the update request.
+    this.contentItemsRepository.merge(contentItem, dto);
 
     // The result must still match its type, e.g. a type change brings its field.
     this.assertTypeField(contentItem.contentType, contentItem);
