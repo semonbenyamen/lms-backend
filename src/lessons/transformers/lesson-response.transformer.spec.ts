@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { CourseDifficulty } from '../../common/enums/course-difficulty.enum.js';
 import { Lesson } from '../entities/lesson.entity.js';
 import { toLessonResponseDto } from './lesson-response.transformer.js';
 
@@ -14,9 +13,6 @@ describe('toLessonResponseDto', () => {
       sectionId: 'section-1',
       title: 'Introduction',
       orderIndex: 1,
-      topic: 'TypeScript',
-      difficulty: CourseDifficulty.BEGINNER,
-      prerequisites: ['JavaScript'],
       createdAt,
       updatedAt,
       deletedAt: null,
@@ -30,9 +26,6 @@ describe('toLessonResponseDto', () => {
       sectionId: 'section-1',
       title: 'Introduction',
       orderIndex: 1,
-      topic: 'TypeScript',
-      difficulty: CourseDifficulty.BEGINNER,
-      prerequisites: ['JavaScript'],
       createdAt,
       updatedAt,
     });

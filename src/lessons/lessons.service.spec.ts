@@ -5,7 +5,6 @@ import { QueryFailedError } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JwtPayload } from '../auth/types/authenticated-request.type.js';
-import { CourseDifficulty } from '../common/enums/course-difficulty.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { SectionsService } from '../sections/sections.service.js';
 import { Lesson } from './entities/lesson.entity.js';
@@ -77,8 +76,6 @@ describe('LessonsService', () => {
     const createDto = {
       title: 'Introduction to Services',
       orderIndex: 1,
-      topic: 'Dependency Injection',
-      difficulty: CourseDifficulty.BEGINNER,
     };
 
     it('should create a lesson in the section', async () => {

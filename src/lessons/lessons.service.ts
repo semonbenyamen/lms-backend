@@ -28,9 +28,6 @@ export class LessonsService {
       sectionId,
       title: dto.title,
       orderIndex: dto.orderIndex,
-      topic: dto.topic ?? null,
-      difficulty: dto.difficulty ?? null,
-      prerequisites: dto.prerequisites ?? null,
     });
 
     return this.saveLesson(lesson);

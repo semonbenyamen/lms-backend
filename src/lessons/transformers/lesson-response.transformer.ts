@@ -8,9 +8,6 @@ export function toLessonResponseDto(lesson: Lesson): LessonResponseDto {
     sectionId: lesson.sectionId,
     title: lesson.title,
     orderIndex: lesson.orderIndex,
-    topic: lesson.topic,
-    difficulty: lesson.difficulty,
-    prerequisites: lesson.prerequisites,
     createdAt: lesson.createdAt,
     updatedAt: lesson.updatedAt,
   };

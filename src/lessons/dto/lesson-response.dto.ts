@@ -1,6 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-
-import { CourseDifficulty } from '../../common/enums/course-difficulty.enum.js';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class LessonResponseDto {
   @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440003' })
@@ -14,19 +12,6 @@ export class LessonResponseDto {
 
   @ApiProperty({ example: 1 })
   orderIndex: number;
-
-  @ApiPropertyOptional({ example: 'Routing', nullable: true })
-  topic?: string | null;
-
-  @ApiPropertyOptional({
-    enum: CourseDifficulty,
-    example: CourseDifficulty.BEGINNER,
-    nullable: true,
-  })
-  difficulty?: CourseDifficulty | null;
-
-  @ApiPropertyOptional({ example: ['Basic TypeScript'], type: [String], nullable: true })
-  prerequisites?: string[] | null;
 
   @ApiProperty({ example: '2026-10-11T00:00:00.000Z' })
   createdAt: Date;

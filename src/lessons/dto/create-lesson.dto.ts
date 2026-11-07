@@ -1,17 +1,6 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import {
-  IsArray,
-  IsEnum,
-  IsInt,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  MaxLength,
-  Min,
-} from 'class-validator';
-
-import { CourseDifficulty } from '../../common/enums/course-difficulty.enum.js';
+import { IsInt, IsNotEmpty, IsString, MaxLength, Min } from 'class-validator';
 
 export class CreateLessonDto {
   @ApiProperty({
@@ -35,33 +24,4 @@ export class CreateLessonDto {
   @IsInt()
   @Min(0)
   orderIndex: number;
-
-  @ApiPropertyOptional({
-    example: 'Routing and Request Handling',
-    description: 'Specific topic covered by the lesson',
-    maxLength: 255,
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  topic?: string;
-
-  @ApiPropertyOptional({
-    enum: CourseDifficulty,
-    example: CourseDifficulty.BEGINNER,
-    description: 'Difficulty level of the lesson',
-  })
-  @IsOptional()
-  @IsEnum(CourseDifficulty)
-  difficulty?: CourseDifficulty;
-
-  @ApiPropertyOptional({
-    example: ['Basic TypeScript'],
-    description: 'Prerequisites for this specific lesson',
-    type: [String],
-  })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  prerequisites?: string[];
 }
