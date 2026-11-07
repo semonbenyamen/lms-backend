@@ -57,14 +57,8 @@ export class ContentItem {
   @Column({ name: 'duration_seconds', type: 'int', nullable: true })
   durationSeconds: number | null;
 
-  @Column({ type: 'varchar', length: 50, nullable: true })
-  language: string | null;
-
   @Column({ name: 'order_index', type: 'int' })
   orderIndex: number;
-
-  @Column('text', { array: true, default: '{}' })
-  tags: string[];
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

@@ -20,14 +20,11 @@ describe('UpdateContentItemDto', () => {
         title: null,
         contentType: null,
         orderIndex: null,
-        tags: null,
       }),
-    ).toEqual(['title', 'contentType', 'orderIndex', 'tags']);
+    ).toEqual(['title', 'contentType', 'orderIndex']);
   });
 
   it('should allow clearing optional fields with null', async () => {
-    expect(
-      await invalidFields({ durationSeconds: null, language: null }),
-    ).toEqual([]);
+    expect(await invalidFields({ durationSeconds: null })).toEqual([]);
   });
 });

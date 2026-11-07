@@ -33,14 +33,8 @@ export class ContentItemResponseDto {
   @ApiPropertyOptional({ example: 640, nullable: true })
   durationSeconds?: number | null;
 
-  @ApiPropertyOptional({ example: 'en', nullable: true })
-  language?: string | null;
-
   @ApiProperty({ example: 1 })
   orderIndex: number;
-
-  @ApiPropertyOptional({ example: ['nestjs', 'setup'], type: [String] })
-  tags?: string[];
 
   @ApiProperty({ example: '2026-10-11T00:00:00.000Z' })
   createdAt: Date;

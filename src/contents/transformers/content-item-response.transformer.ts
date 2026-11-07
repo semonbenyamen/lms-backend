@@ -14,9 +14,7 @@ export function toContentItemResponseDto(
     videoUrl: contentItem.videoUrl,
     imageUrl: contentItem.imageUrl,
     durationSeconds: contentItem.durationSeconds,
-    language: contentItem.language,
     orderIndex: contentItem.orderIndex,
-    tags: contentItem.tags,
     createdAt: contentItem.createdAt,
     updatedAt: contentItem.updatedAt,
   };

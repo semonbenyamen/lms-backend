@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
-  IsArray,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -9,7 +8,6 @@ import {
   IsString,
   MaxLength,
   Min,
-  ValidateIf,
 } from 'class-validator';
 
 import { ContentType } from '../../common/enums/content-type.enum.js';
@@ -69,7 +67,8 @@ export class CreateContentItemDto {
 
   @ApiPropertyOptional({
     example: 640,
-    description: 'Duration in seconds for video or audio items',
+    description:
+      'Duration of the video in seconds, kept for video content only',
     minimum: 0,
   })
   @IsOptional()
@@ -77,16 +76,6 @@ export class CreateContentItemDto {
   @IsInt()
   @Min(0)
   durationSeconds?: number;
-
-  @ApiPropertyOptional({
-    example: 'en',
-    description: 'Language of the content item',
-    maxLength: 50,
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(50)
-  language?: string;
 
   @ApiProperty({
     example: 1,
@@ -97,15 +86,4 @@ export class CreateContentItemDto {
   @IsInt()
   @Min(0)
   orderIndex: number;
-
-  @ApiPropertyOptional({
-    example: ['nestjs', 'setup', 'tutorial'],
-    description: 'Tags associated with the content item',
-    type: [String],
-  })
-  // tags cannot be null in the database, so null is rejected instead of skipped.
-  @ValidateIf((_, value) => value !== undefined)
-  @IsArray()
-  @IsString({ each: true })
-  tags?: string[];
 }

@@ -4,6 +4,7 @@ export interface TypeFieldValues {
   bodyText?: string | null;
   videoUrl?: string | null;
   imageUrl?: string | null;
+  durationSeconds?: number | null;
 }
 
 // The field each content type requires.
@@ -32,20 +33,19 @@ export function getTypeFieldError(
 }
 
 // Keeps the type's own field and clears the others. A video may keep its
-// transcript in bodyText.
+// transcript in bodyText, and only a video has a duration.
 export function pickTypeFields(
   contentType: ContentType,
   values: TypeFieldValues,
-): { bodyText: string | null; videoUrl: string | null; imageUrl: string | null } {
+): Required<TypeFieldValues> {
   const field = TYPE_FIELD[contentType];
-  const keepsTranscript = contentType === ContentType.VIDEO;
+  const isVideo = contentType === ContentType.VIDEO;
 
   return {
     bodyText:
-      field === 'bodyText' || keepsTranscript
-        ? trimmedOrNull(values.bodyText)
-        : null,
+      field === 'bodyText' || isVideo ? trimmedOrNull(values.bodyText) : null,
     videoUrl: field === 'videoUrl' ? trimmedOrNull(values.videoUrl) : null,
     imageUrl: field === 'imageUrl' ? trimmedOrNull(values.imageUrl) : null,
+    durationSeconds: isVideo ? (values.durationSeconds ?? null) : null,
   };
 }

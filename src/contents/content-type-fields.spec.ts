@@ -32,17 +32,19 @@ describe('getTypeFieldError', () => {
 });
 
 describe('pickTypeFields', () => {
-  it('keeps a video transcript in bodyText', () => {
+  it('keeps a video transcript in bodyText and its duration', () => {
     expect(
       pickTypeFields(ContentType.VIDEO, {
         bodyText: 'Transcript',
         videoUrl: 'https://example.com/v.mp4',
         imageUrl: 'https://example.com/old.png',
+        durationSeconds: 640,
       }),
     ).toEqual({
       bodyText: 'Transcript',
       videoUrl: 'https://example.com/v.mp4',
       imageUrl: null,
+      durationSeconds: 640,
     });
   });
 
@@ -51,17 +53,22 @@ describe('pickTypeFields', () => {
       pickTypeFields(ContentType.IMAGE, {
         bodyText: 'old text',
         imageUrl: 'https://example.com/i.png',
+        durationSeconds: 640,
       }),
     ).toEqual({
       bodyText: null,
       videoUrl: null,
       imageUrl: 'https://example.com/i.png',
+      durationSeconds: null,
     });
   });
 
   it('trims the text body', () => {
-    expect(pickTypeFields(ContentType.TEXT, { bodyText: '  Hello ' })).toEqual(
-      { bodyText: 'Hello', videoUrl: null, imageUrl: null },
-    );
+    expect(pickTypeFields(ContentType.TEXT, { bodyText: '  Hello ' })).toEqual({
+      bodyText: 'Hello',
+      videoUrl: null,
+      imageUrl: null,
+      durationSeconds: null,
+    });
   });
 });

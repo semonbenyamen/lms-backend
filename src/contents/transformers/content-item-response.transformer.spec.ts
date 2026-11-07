@@ -18,9 +18,7 @@ describe('toContentItemResponseDto', () => {
       videoUrl: 'https://example.com/v.mp4',
       imageUrl: null,
       durationSeconds: 640,
-      language: 'en',
       orderIndex: 1,
-      tags: ['intro'],
       createdAt,
       updatedAt,
 
@@ -37,9 +35,7 @@ describe('toContentItemResponseDto', () => {
       videoUrl: 'https://example.com/v.mp4',
       imageUrl: null,
       durationSeconds: 640,
-      language: 'en',
       orderIndex: 1,
-      tags: ['intro'],
       createdAt,
       updatedAt,
     });
