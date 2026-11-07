@@ -7,22 +7,14 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUUID,
   MaxLength,
   Min,
 } from 'class-validator';
 
 import { ContentType } from '../../common/enums/content-type.enum.js';
 
+// The lesson comes from the route, so it is not part of the body.
 export class CreateContentItemDto {
-  @ApiPropertyOptional({
-    example: '550e8400-e29b-41d4-a716-446655440003',
-    description: 'Lesson ID (optional if provided as route param)',
-  })
-  @IsOptional()
-  @IsUUID()
-  lessonId?: string;
-
   @ApiProperty({
     example: 'Video Lecture: Setting up NestJS',
     description: 'Title of the content item',
