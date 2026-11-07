@@ -23,6 +23,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import type { AuthenticatedRequest } from '../auth/types/authenticated-request.type.js';
 import { ApiSuccessResponse } from '../common/decorators/api-success-response.decorator.js';
+import { ApiResponseDto } from '../common/dto/api-response.dto.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { LessonResponseDto } from './dto/lesson-response.dto.js';
 import { UpdateLessonDto } from './dto/update-lesson.dto.js';
@@ -68,7 +69,11 @@ export class LessonsController {
   @Roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a lesson (Owner or Admin)' })
-  @ApiSuccessResponse(LessonResponseDto, HttpStatus.OK)
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Lesson updated successfully',
+    type: ApiResponseDto,
+  })
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
     description: 'Invalid request body or UUID format',
@@ -92,10 +97,9 @@ export class LessonsController {
   async update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateLessonDto,
-  ) {
-    const lesson = await this.lessonsService.update(id, dto);
-
-    return toLessonResponseDto(lesson);
+  ): Promise<void> {
+    // Update the lesson without returning its data.
+    await this.lessonsService.update(id, dto);
   }
 
   @Delete(':id')

@@ -87,17 +87,14 @@ describe('LessonsController', () => {
     );
   });
 
-  it('should create a lesson and return transformed data', async () => {
+  it('should create a lesson without returning its data', async () => {
     const dto = { title: 'Lesson 1', orderIndex: 1 };
     mockLessonsService.create.mockResolvedValue(lesson);
 
     const result = await sectionLessonsController.create('section-1', dto);
 
     expect(mockLessonsService.create).toHaveBeenCalledWith('section-1', dto);
-
-    expect(result).toEqual(expectedLesson);
-    expect(result).not.toHaveProperty('deletedAt');
-    expect(result).not.toHaveProperty('section');
+    expect(result).toBeUndefined();
   });
 
   it('should find lesson by ID and return transformed data', async () => {
@@ -133,23 +130,18 @@ describe('LessonsController', () => {
     expect(result[0]).not.toHaveProperty('section');
   });
 
-  it('should update a lesson and return transformed data', async () => {
-    const updatedLesson = { ...lesson, title: 'Updated' };
-    mockLessonsService.update.mockResolvedValue(updatedLesson);
+  it('should update a lesson without returning its data', async () => {
+    mockLessonsService.update.mockResolvedValue({
+      ...lesson,
+      title: 'Updated',
+    });
 
     const result = await controller.update('l-1', { title: 'Updated' });
 
     expect(mockLessonsService.update).toHaveBeenCalledWith('l-1', {
       title: 'Updated',
     });
-
-    expect(result).toEqual({
-      ...expectedLesson,
-      title: 'Updated',
-    });
-
-    expect(result).not.toHaveProperty('deletedAt');
-    expect(result).not.toHaveProperty('section');
+    expect(result).toBeUndefined();
   });
 
   it('should delete a lesson', async () => {
