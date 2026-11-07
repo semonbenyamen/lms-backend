@@ -36,7 +36,7 @@ const NOT_COURSE_OWNER = 'Forbidden - not course owner or admin';
 @ApiTags('Sections')
 @Controller('courses/:courseId/sections')
 export class CourseSectionsController {
-  constructor(private readonly sectionsService: SectionsService) { }
+  constructor(private readonly sectionsService: SectionsService) {}
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard, SectionOwnershipGuard)
@@ -45,7 +45,6 @@ export class CourseSectionsController {
   @ApiOperation({
     summary: 'Add a section to a course (Owner or Admin)',
   })
-
   @ApiResponse({
     status: HttpStatus.CREATED,
     description: 'Section created successfully',
@@ -59,8 +58,6 @@ export class CourseSectionsController {
     [HttpStatus.NOT_FOUND]: 'Course not found',
     [HttpStatus.CONFLICT]: 'orderIndex is already used in this course',
   })
-
-
   async create(
     @Param('courseId', new ParseUUIDPipe()) courseId: string,
     @Body() dto: CreateSectionDto,
@@ -68,8 +65,6 @@ export class CourseSectionsController {
     // Create the section without returning its data.
     await this.sectionsService.create(courseId, dto);
   }
-
-
 
   @Get()
   @UseGuards(JwtAuthGuard)
@@ -82,21 +77,15 @@ export class CourseSectionsController {
     [HttpStatus.BAD_REQUEST]: 'Invalid UUID format',
     [HttpStatus.NOT_FOUND]: 'Course not found',
   })
-
-  
-async findByCourse(
-  @Param('courseId', new ParseUUIDPipe()) courseId: string,
-  @Req() request: AuthenticatedRequest,
-): Promise<SectionResponseDto[]> {
-  const sections = await this.sectionsService.findByCourse(
-    courseId,
-    {
+  async findByCourse(
+    @Param('courseId', new ParseUUIDPipe()) courseId: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<SectionResponseDto[]> {
+    const sections = await this.sectionsService.findByCourse(courseId, {
       sub: request.user.sub,
       role: request.user.role,
-    },
-  );
+    });
 
-  return sections.map(toSectionResponseDto);
-}
-
+    return sections.map(toSectionResponseDto);
+  }
 }

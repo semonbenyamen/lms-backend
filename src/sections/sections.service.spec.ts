@@ -1,8 +1,4 @@
-
-import {
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { QueryFailedError } from 'typeorm';
@@ -109,13 +105,11 @@ describe('SectionsService', () => {
     });
 
     it('should throw NotFoundException if course does not exist', async () => {
-      mockCoursesService.findById.mockRejectedValue(
-        new NotFoundException(),
-      );
+      mockCoursesService.findById.mockRejectedValue(new NotFoundException());
 
-      await expect(
-        service.create('unknown-c', dto),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.create('unknown-c', dto)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should throw ConflictException if the orderIndex is taken', async () => {
@@ -136,9 +130,9 @@ describe('SectionsService', () => {
         ),
       );
 
-      await expect(
-        service.create('c-1', dto),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.create('c-1', dto)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -174,9 +168,9 @@ describe('SectionsService', () => {
     it('should throw NotFoundException to student for draft section', async () => {
       mockSectionsRepo.findOne.mockResolvedValue(draftSection);
 
-      await expect(
-        service.findById('s-2', studentUser),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.findById('s-2', studentUser)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should return draft section to owner instructor', async () => {
@@ -209,9 +203,9 @@ describe('SectionsService', () => {
         course: null,
       });
 
-      await expect(
-        service.findById('s-1', adminUser),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.findById('s-1', adminUser)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -231,35 +225,33 @@ describe('SectionsService', () => {
       ).resolves.toEqual([]);
     });
 
-    
-it('should return all sections without pagination', async () => {
-  const sections = [
-    { id: 's-1', courseId: 'c-1', orderIndex: 1 },
-    { id: 's-2', courseId: 'c-1', orderIndex: 2 },
-  ];
+    it('should return all sections without pagination', async () => {
+      const sections = [
+        { id: 's-1', courseId: 'c-1', orderIndex: 1 },
+        { id: 's-2', courseId: 'c-1', orderIndex: 2 },
+      ];
 
-  mockCoursesService.findById.mockResolvedValue(draftCourse);
-  mockSectionsRepo.find.mockResolvedValue(sections);
+      mockCoursesService.findById.mockResolvedValue(draftCourse);
+      mockSectionsRepo.find.mockResolvedValue(sections);
 
-  // Verify that all sections are returned without pagination.
-  const result = await service.findByCourse('c-1', instructorUser);
+      // Verify that all sections are returned without pagination.
+      const result = await service.findByCourse('c-1', instructorUser);
 
-  expect(result).toEqual(sections);
+      expect(result).toEqual(sections);
 
-  // Verify that the database query has no skip or take limits.
-  expect(mockSectionsRepo.find).toHaveBeenCalledWith({
-    where: { courseId: 'c-1' },
-    order: { orderIndex: 'ASC' },
-  });
-});
-
+      // Verify that the database query has no skip or take limits.
+      expect(mockSectionsRepo.find).toHaveBeenCalledWith({
+        where: { courseId: 'c-1' },
+        order: { orderIndex: 'ASC' },
+      });
+    });
 
     it('should throw NotFoundException to student for a draft course', async () => {
       mockCoursesService.findById.mockResolvedValue(draftCourse);
 
-      await expect(
-        service.findByCourse('c-1', studentUser),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.findByCourse('c-1', studentUser)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -274,15 +266,12 @@ it('should return all sections without pagination', async () => {
 
     it('should update section', async () => {
       mockSectionsRepo.findOne.mockResolvedValue({ ...section });
-      mockSectionsRepo.save.mockImplementation(
-        (s) => Promise.resolve(s),
-      );
+      mockSectionsRepo.save.mockImplementation((s) => Promise.resolve(s));
 
       const result = await service.update('s-1', { title: 'New' });
 
       expect(result.title).toBe('New');
     });
-
 
     it('should update orderIndex to 0', async () => {
       const section = {
@@ -295,17 +284,14 @@ it('should return all sections without pagination', async () => {
       };
 
       mockSectionsRepo.findOne.mockResolvedValue({ ...section });
-      mockSectionsRepo.save.mockImplementation(
-        async (entity) => entity,
-      );
+      mockSectionsRepo.save.mockImplementation(async (entity) => entity);
 
       const result = await service.update('s-1', { orderIndex: 0 });
 
       // Verify that merge preserves zero as a valid orderIndex.
-      expect(mockSectionsRepo.merge).toHaveBeenCalledWith(
-        expect.anything(),
-        { orderIndex: 0 },
-      );
+      expect(mockSectionsRepo.merge).toHaveBeenCalledWith(expect.anything(), {
+        orderIndex: 0,
+      });
 
       expect(mockSectionsRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({ orderIndex: 0 }),
@@ -323,15 +309,13 @@ it('should return all sections without pagination', async () => {
       },
     };
 
+    it('should remove an existing section', async () => {
+      mockSectionsRepo.findOne.mockResolvedValue(section);
+      mockSectionsRepo.softRemove.mockResolvedValue(undefined);
 
-it('should remove an existing section', async () => {
-  mockSectionsRepo.findOne.mockResolvedValue(section);
-  mockSectionsRepo.softRemove.mockResolvedValue(undefined);
+      await service.remove('s-1');
 
-  await service.remove('s-1');
-
-  expect(mockSectionsRepo.softRemove).toHaveBeenCalledWith(section);
-});
-
+      expect(mockSectionsRepo.softRemove).toHaveBeenCalledWith(section);
+    });
   });
 });

@@ -22,13 +22,9 @@ export class SectionsService {
     @InjectRepository(Section)
     private readonly sectionsRepository: Repository<Section>,
     private readonly coursesService: CoursesService,
-  ) { }
+  ) {}
 
-
-  async create(
-    courseId: string,
-    dto: CreateSectionDto,
-  ): Promise<Section> {
+  async create(courseId: string, dto: CreateSectionDto): Promise<Section> {
     // Ensure the parent course exists.
     await this.coursesService.findById(courseId);
 
@@ -40,7 +36,6 @@ export class SectionsService {
 
     return this.saveSection(section);
   }
-
 
   async findById(id: string, user: SectionActor): Promise<Section> {
     const section = await this.sectionsRepository.findOne({
@@ -58,36 +53,25 @@ export class SectionsService {
     return section;
   }
 
-  
-async findByCourse(
-  courseId: string,
-  user: SectionActor,
-): Promise<Section[]> {
-  // Check that the course exists.
-  const course = await this.coursesService.findById(courseId);
+  async findByCourse(courseId: string, user: SectionActor): Promise<Section[]> {
+    // Check that the course exists.
+    const course = await this.coursesService.findById(courseId);
 
-  // Allow access only if the user can view the course.
-  if (!canReadCourse(course, user)) {
-    throw new NotFoundException(
-      `Course with ID ${courseId} not found`,
-    );
+    // Allow access only if the user can view the course.
+    if (!canReadCourse(course, user)) {
+      throw new NotFoundException(`Course with ID ${courseId} not found`);
+    }
+
+    // Return all sections ordered by their position.
+    return this.sectionsRepository.find({
+      where: { courseId },
+      order: {
+        orderIndex: 'ASC',
+      },
+    });
   }
 
-  // Return all sections ordered by their position.
-  return this.sectionsRepository.find({
-    where: { courseId },
-    order: {
-      orderIndex: 'ASC',
-    },
-  });
-}
-
-
-
-  async update(
-    id: string,
-    dto: UpdateSectionDto,
-  ): Promise<Section> {
+  async update(id: string, dto: UpdateSectionDto): Promise<Section> {
     const section = await this.findSectionWithCourse(id);
 
     // Apply only the fields provided in the update request.
@@ -96,14 +80,11 @@ async findByCourse(
     return this.saveSection(section);
   }
 
-
-
   async remove(id: string): Promise<void> {
     const section = await this.findSectionWithCourse(id);
 
     await this.sectionsRepository.softRemove(section);
   }
-
 
   // order_index is unique per course, so a clash is a 409, not a 500.
   private async saveSection(section: Section): Promise<Section> {

@@ -1,4 +1,3 @@
-
 import { Test, TestingModule } from '@nestjs/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -71,10 +70,7 @@ describe('SectionsController', () => {
 
     const result = await courseSectionsController.create('c-1', dto);
 
-    expect(mockSectionsService.create).toHaveBeenCalledWith(
-      'c-1',
-      dto,
-    );
+    expect(mockSectionsService.create).toHaveBeenCalledWith('c-1', dto);
 
     // POST should not expose the created section.
     expect(result).toBeUndefined();
@@ -101,13 +97,10 @@ describe('SectionsController', () => {
 
     const result = await controller.findOne('s-1', mockReq);
 
-    expect(mockSectionsService.findById).toHaveBeenCalledWith(
-      's-1',
-      {
-        sub: mockReq.user.sub,
-        role: mockReq.user.role,
-      },
-    );
+    expect(mockSectionsService.findById).toHaveBeenCalledWith('s-1', {
+      sub: mockReq.user.sub,
+      role: mockReq.user.role,
+    });
 
     // Only public DTO fields should be returned.
     expect(result).toEqual({
@@ -152,21 +145,13 @@ describe('SectionsController', () => {
 
     mockSectionsService.findByCourse.mockResolvedValue(sections);
 
-    const result = await courseSectionsController.findByCourse(
-      'c-1',
-      mockReq,
-    );
+    const result = await courseSectionsController.findByCourse('c-1', mockReq);
 
-    
     // Verify that the controller passes course ID and user details without pagination.
-    expect(mockSectionsService.findByCourse).toHaveBeenCalledWith(
-      'c-1',
-      {
-        sub: mockReq.user.sub,
-        role: mockReq.user.role,
-      },
-    );
-
+    expect(mockSectionsService.findByCourse).toHaveBeenCalledWith('c-1', {
+      sub: mockReq.user.sub,
+      role: mockReq.user.role,
+    });
 
     // Every section must be transformed into its public DTO.
     expect(result).toEqual([
@@ -202,10 +187,7 @@ describe('SectionsController', () => {
 
     const result = await controller.update('s-1', dto);
 
-    expect(mockSectionsService.update).toHaveBeenCalledWith(
-      's-1',
-      dto,
-    );
+    expect(mockSectionsService.update).toHaveBeenCalledWith('s-1', dto);
 
     // PATCH should not expose the updated section.
     expect(result).toBeUndefined();
