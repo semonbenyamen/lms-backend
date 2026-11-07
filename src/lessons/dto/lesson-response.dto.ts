@@ -15,7 +15,10 @@ export class LessonResponseDto {
   @ApiProperty({ example: 1 })
   orderIndex: number;
 
-  @ApiPropertyOptional({ type: () => [ContentItemResponseDto] })
+  @ApiPropertyOptional({
+    type: () => [ContentItemResponseDto],
+    description: 'Returned only with the lesson details, ordered by position',
+  })
   contentItems?: ContentItemResponseDto[];
 
   @ApiProperty({ example: '2026-10-11T00:00:00.000Z' })

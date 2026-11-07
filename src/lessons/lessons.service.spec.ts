@@ -159,6 +159,8 @@ describe('LessonsService', () => {
       orderIndex: publishedLesson.orderIndex,
       createdAt: publishedLesson.createdAt,
       updatedAt: publishedLesson.updatedAt,
+      // The details return the content items too.
+      contentItems: [],
     };
 
     const expectedUnpublishedLesson = {
