@@ -33,7 +33,6 @@ import { CourseResponseDto } from './dto/course-response.dto.js';
 import { CreateCourseDto } from './dto/create-course.dto.js';
 import { UpdateCourseDto } from './dto/update-course.dto.js';
 import { CourseOwnershipGuard } from './guards/course-ownership.guard.js';
-import { toCourseResponseDto } from './transformers/course-response.transformer.js';
 
 @ApiTags('Courses')
 @Controller('dashboard/courses')
@@ -43,40 +42,30 @@ export class CoursesController {
 
   @Post()
   @ApiCreateCourse()
-  async create(
+  create(
     @Body() createCourseDto: CreateCourseDto,
     @Req() request: AuthenticatedRequest,
   ): Promise<IdResponseDto> {
-    const { id } = await this.coursesService.create(
-      createCourseDto,
-      request.user.sub,
-    );
-
-    return { id };
+    return this.coursesService.create(createCourseDto, request.user.sub);
   }
 
   @Get()
   @ApiListCourses()
-  async findAll(
+  findAll(
     @Query() paginationQuery: PaginationQueryDto,
     @Req() request: AuthenticatedRequest,
   ): Promise<PaginatedResult<CourseResponseDto>> {
-    const { items, meta } = await this.coursesService.findAll(
-      paginationQuery,
-      request.user,
-    );
-
-    return { items: items.map(toCourseResponseDto), meta };
+    return this.coursesService.findAll(paginationQuery, request.user);
   }
 
   // Routes with an id run CourseOwnershipGuard after the class guards.
   @Get(':id')
   @UseGuards(CourseOwnershipGuard)
   @ApiGetCourse()
-  async findOne(
+  findOne(
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<CourseResponseDto> {
-    return toCourseResponseDto(await this.coursesService.findById(id));
+    return this.coursesService.getCourse(id);
   }
 
   @Patch(':id')

@@ -52,6 +52,34 @@ describe('CoursesService', () => {
     role: UserRole.ADMIN,
   };
 
+  const timestamp = new Date('2026-11-01T10:00:00.000Z');
+
+  const courseResponse = (id: string) => ({
+    id,
+    title: 'NestJS',
+    description: 'Backend course',
+    categoryId: 'category-uuid-1',
+    category: { id: 'category-uuid-1', name: 'Backend' },
+    topics: ['NestJS'],
+    difficulty: CourseDifficulty.BEGINNER,
+    language: CourseLanguage.ENGLISH,
+    prerequisites: null,
+    estimatedDuration: null,
+    isPublished: false,
+    thumbnailUrl: null,
+    instructorId,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+
+  // Internal fields must not reach the response.
+  const courseEntity = (id: string) => ({
+    ...courseResponse(id),
+    thumbnailPublicId: null,
+    deletedAt: null,
+    instructor: { id: instructorId, passwordHash: 'hash' },
+  });
+
   beforeEach(async () => {
     vi.clearAllMocks();
     mockCoursesRepo.createQueryBuilder.mockReturnValue(courseQueryBuilder);
@@ -107,9 +135,9 @@ describe('CoursesService', () => {
         instructorId,
       });
       expect(mockCoursesRepo.save).toHaveBeenCalledWith(mockCourse);
-      // The controller needs only the new id, so the course is not loaded again.
+      // Only the new id is returned, so the course is not loaded again.
       expect(courseQueryBuilder.getOne).not.toHaveBeenCalled();
-      expect(result).toEqual(mockCourse);
+      expect(result).toEqual({ id: 'course-1' });
     });
 
     it('should not create a course with an unknown category', async () => {
@@ -155,8 +183,8 @@ describe('CoursesService', () => {
       expect(mockQueryBuilder.take).toHaveBeenCalledWith(10);
     });
 
-    it('should return the courses with the pagination meta', async () => {
-      const courses = [{ id: 'course-1' }, { id: 'course-2' }];
+    it('should return the courses without internal fields and with the pagination meta', async () => {
+      const courses = [courseEntity('course-1'), courseEntity('course-2')];
       mockQueryBuilder.getManyAndCount.mockResolvedValue([courses, 12]);
 
       const result = await service.findAll(
@@ -167,7 +195,7 @@ describe('CoursesService', () => {
       expect(mockQueryBuilder.skip).toHaveBeenCalledWith(2);
       expect(mockQueryBuilder.take).toHaveBeenCalledWith(2);
       expect(result).toEqual({
-        items: courses,
+        items: [courseResponse('course-1'), courseResponse('course-2')],
         meta: {
           total: 12,
           page: 2,
@@ -209,7 +237,15 @@ describe('CoursesService', () => {
   });
 
   describe('Course Retrieval by ID', () => {
-    it('should return the course', async () => {
+    it('should return the course details without internal fields', async () => {
+      courseQueryBuilder.getOne.mockResolvedValueOnce(courseEntity('course-1'));
+
+      await expect(service.getCourse('course-1')).resolves.toEqual(
+        courseResponse('course-1'),
+      );
+    });
+
+    it('should return the entity for other services', async () => {
       const course = { id: 'course-1', isPublished: false };
       courseQueryBuilder.getOne.mockResolvedValueOnce(course);
 
