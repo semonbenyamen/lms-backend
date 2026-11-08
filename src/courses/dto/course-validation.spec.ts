@@ -51,11 +51,14 @@ describe('Course DTO Validation', () => {
   });
 
   it('should reject a course without a difficulty', async () => {
-        await expect(
-      validationPipe.transform({ ...validCourse, difficulty: undefined }, {
-        type: 'body',
-        metatype: CreateCourseDto,
-      }),
+    await expect(
+      validationPipe.transform(
+        { ...validCourse, difficulty: undefined },
+        {
+          type: 'body',
+          metatype: CreateCourseDto,
+        },
+      ),
     ).rejects.toThrow(BadRequestException);
   });
 
@@ -75,6 +78,24 @@ describe('Course DTO Validation', () => {
         { type: 'body', metatype: UpdateCourseDto },
       ),
     ).resolves.toMatchObject({ title: 'Updated title' });
+  });
+
+  it('should reject null for fields the database requires on update', async () => {
+    await expect(
+      validationPipe.transform(
+        { title: null, difficulty: null },
+        { type: 'body', metatype: UpdateCourseDto },
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('should allow null to clear optional fields on update', async () => {
+    await expect(
+      validationPipe.transform(
+        { prerequisites: null, estimatedDuration: null },
+        { type: 'body', metatype: UpdateCourseDto },
+      ),
+    ).resolves.toMatchObject({ prerequisites: null, estimatedDuration: null });
   });
 
   it('should reject isPublished during course creation', async () => {
