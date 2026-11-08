@@ -57,6 +57,19 @@ export class Course {
   @Column({ name: 'is_published', type: 'boolean', default: false })
   isPublished: boolean;
 
+  // Filled by the Cloudinary upload, which comes in a later branch.
+  @Column({ name: 'thumbnail_url', type: 'text', nullable: true })
+  thumbnailUrl: string | null;
+
+  // Needed to delete the old image from Cloudinary when it changes.
+  @Column({
+    name: 'thumbnail_public_id',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
+  thumbnailPublicId: string | null;
+
   @Index('IDX_courses_instructor_id')
   @Column({ name: 'instructor_id', type: 'uuid' })
   instructorId: string;

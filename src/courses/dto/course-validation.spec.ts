@@ -98,6 +98,15 @@ describe('Course DTO Validation', () => {
     ).resolves.toMatchObject({ prerequisites: null, estimatedDuration: null });
   });
 
+  it('should reject a thumbnail url until uploads are added', async () => {
+    await expect(
+      validationPipe.transform(
+        { ...validCourse, thumbnailUrl: 'https://example.com/a.png' },
+        { type: 'body', metatype: CreateCourseDto },
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
   it('should reject isPublished during course creation', async () => {
     // Publishing must not be controlled through the create DTO.
     await expect(
