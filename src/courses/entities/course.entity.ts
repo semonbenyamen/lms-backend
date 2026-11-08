@@ -32,7 +32,11 @@ export class Course {
   categoryId: string;
 
   @ManyToOne(() => Category, { onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'category_id' })
+  // Same name as the migration, so migration:generate finds no difference.
+  @JoinColumn({
+    name: 'category_id',
+    foreignKeyConstraintName: 'FK_courses_category_id',
+  })
   category: Relation<Category>;
 
   @Column('text', { array: true, default: '{}' })
