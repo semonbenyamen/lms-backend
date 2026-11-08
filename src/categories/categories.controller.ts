@@ -122,7 +122,9 @@ export class CategoriesController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Delete a category without courses (Admin only)' })
+  @ApiOperation({
+    summary: 'Delete a category without active courses (Admin only)',
+  })
   @ApiResponse({
     status: HttpStatus.NO_CONTENT,
     description: 'Category deleted successfully',
@@ -131,7 +133,7 @@ export class CategoriesController {
     [HttpStatus.BAD_REQUEST]: INVALID_UUID,
     [HttpStatus.FORBIDDEN]: 'Forbidden - only admins can delete categories',
     [HttpStatus.NOT_FOUND]: CATEGORY_NOT_FOUND,
-    [HttpStatus.CONFLICT]: 'This category has courses',
+    [HttpStatus.CONFLICT]: 'This category has active courses',
   })
   remove(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.categoriesService.remove(id);
