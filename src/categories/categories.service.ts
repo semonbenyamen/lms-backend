@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
 
+import { IdResponseDto } from '../common/dto/id-response.dto.js';
 import {
   getPaginationMeta,
   getPaginationParams,
@@ -13,9 +14,11 @@ import {
 } from '../common/pagintion/pagination.util.js';
 import { Course } from '../courses/entities/course.entity.js';
 import { CategoriesQueryDto } from './dto/categories-query.dto.js';
+import { CategoryResponseDto } from './dto/category-response.dto.js';
 import { CreateCategoryDto } from './dto/create-category.dto.js';
 import { UpdateCategoryDto } from './dto/update-category.dto.js';
 import { Category } from './entities/category.entity.js';
+import { toCategoryResponseDto } from './transformers/category-response.transformer.js';
 
 const UNIQUE_VIOLATION = '23505';
 
@@ -28,7 +31,9 @@ export class CategoriesService {
     private readonly coursesRepository: Repository<Course>,
   ) {}
 
-  async findAll(query: CategoriesQueryDto): Promise<PaginatedResult<Category>> {
+  async findAll(
+    query: CategoriesQueryDto,
+  ): Promise<PaginatedResult<CategoryResponseDto>> {
     const { page, limit, skip, take } = getPaginationParams(query);
 
     const queryBuilder = this.categoriesRepository
@@ -48,9 +53,17 @@ export class CategoriesService {
 
     const [items, total] = await queryBuilder.getManyAndCount();
 
-    return { items, meta: getPaginationMeta(total, page, limit) };
+    return {
+      items: items.map(toCategoryResponseDto),
+      meta: getPaginationMeta(total, page, limit),
+    };
   }
 
+  async getCategory(id: string): Promise<CategoryResponseDto> {
+    return toCategoryResponseDto(await this.findById(id));
+  }
+
+  // Returns the entity, so update and remove can save it.
   async findById(id: string): Promise<Category> {
     const category = await this.categoriesRepository.findOneBy({ id });
 
@@ -62,8 +75,13 @@ export class CategoriesService {
   }
 
   // The name is checked by IsCategoryNameAvailable in the DTO before this runs.
-  create(dto: CreateCategoryDto): Promise<Category> {
-    return this.saveCategory(this.categoriesRepository.create(dto));
+  async create(dto: CreateCategoryDto): Promise<IdResponseDto> {
+    const { id } = await this.saveCategory(
+      this.categoriesRepository.create(dto),
+    );
+
+    // The course form selects the new category with this id.
+    return { id };
   }
 
   async update(id: string, dto: UpdateCategoryDto): Promise<void> {

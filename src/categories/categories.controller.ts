@@ -29,7 +29,6 @@ import { CategoriesQueryDto } from './dto/categories-query.dto.js';
 import { CategoryResponseDto } from './dto/category-response.dto.js';
 import { CreateCategoryDto } from './dto/create-category.dto.js';
 import { UpdateCategoryDto } from './dto/update-category.dto.js';
-import { toCategoryResponseDto } from './transformers/category-response.transformer.js';
 
 @ApiTags('Categories')
 @Controller('dashboard/categories')
@@ -39,31 +38,27 @@ export class CategoriesController {
   @Get()
   @Auth()
   @ApiListCategories()
-  async findAll(
+  findAll(
     @Query() query: CategoriesQueryDto,
   ): Promise<PaginatedResult<CategoryResponseDto>> {
-    const { items, meta } = await this.categoriesService.findAll(query);
-
-    return { items: items.map(toCategoryResponseDto), meta };
+    return this.categoriesService.findAll(query);
   }
 
   @Get(':id')
   @Auth()
   @ApiGetCategory()
-  async findOne(
+  findOne(
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<CategoryResponseDto> {
-    return toCategoryResponseDto(await this.categoriesService.findById(id));
+    return this.categoriesService.getCategory(id);
   }
 
   @Post()
   // Instructors add one from the course form when the list doesn't have it.
   @Auth(UserRole.INSTRUCTOR, UserRole.ADMIN)
   @ApiCreateCategory()
-  async create(@Body() dto: CreateCategoryDto): Promise<IdResponseDto> {
-    const { id } = await this.categoriesService.create(dto);
-
-    return { id };
+  create(@Body() dto: CreateCategoryDto): Promise<IdResponseDto> {
+    return this.categoriesService.create(dto);
   }
 
   @Patch(':id')
