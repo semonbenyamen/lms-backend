@@ -22,7 +22,7 @@ describe('CourseOwnershipGuard', () => {
 
   const createContext = (
     user: { sub: string; role: UserRole } | undefined,
-    id: unknown = 'course-1',
+    id: unknown = '550e8400-e29b-41d4-a716-446655440000',
   ) =>
     ({
       switchToHttp: () => ({
@@ -118,5 +118,20 @@ describe('CourseOwnershipGuard', () => {
     await expect(guard.canActivate(context)).rejects.toThrow(
       BadRequestException,
     );
+  });
+
+  it('should reject a course ID that is not a UUID before querying', async () => {
+    const context = createContext(
+      {
+        sub: 'instructor-1',
+        role: UserRole.INSTRUCTOR,
+      },
+      'abc',
+    );
+
+    await expect(guard.canActivate(context)).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(mockCoursesRepository.findOne).not.toHaveBeenCalled();
   });
 });

@@ -84,6 +84,15 @@ export class CourseResponseDto {
   })
   isPublished: boolean;
 
+  @ApiPropertyOptional({
+    example:
+      'https://res.cloudinary.com/demo/image/upload/lms/courses/abc123.webp',
+    description:
+      'Course cover image, null until an image is uploaded so the frontend shows a default one',
+    nullable: true,
+  })
+  thumbnailUrl: string | null;
+
   @ApiProperty({
     example: '550e8400-e29b-41d4-a716-446655440001',
     description: 'Instructor ID who owns the course',

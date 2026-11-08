@@ -34,7 +34,7 @@ describe('CategoriesService', () => {
       ...data,
     })),
     save: vi.fn(),
-    remove: vi.fn(),
+    softRemove: vi.fn(),
     existsBy: vi.fn(),
     createQueryBuilder: vi.fn(() => queryBuilder),
   };
@@ -50,7 +50,7 @@ describe('CategoriesService', () => {
     mockCategoriesRepo.save.mockImplementation((data: Partial<Category>) =>
       Promise.resolve({ id: 'category-1', ...data }),
     );
-    mockCategoriesRepo.remove.mockResolvedValue(undefined);
+    mockCategoriesRepo.softRemove.mockResolvedValue(undefined);
     mockCoursesRepo.exists.mockResolvedValue(false);
 
     const module: TestingModule = await Test.createTestingModule({
@@ -217,36 +217,27 @@ describe('CategoriesService', () => {
   });
 
   describe('remove', () => {
-    it('should delete a category without courses', async () => {
+    it('should soft delete a category without active courses', async () => {
       await service.remove('category-1');
 
-      expect(mockCategoriesRepo.remove).toHaveBeenCalledWith(category);
+      expect(mockCategoriesRepo.softRemove).toHaveBeenCalledWith(category);
     });
 
-    it('should count soft deleted courses', async () => {
+    it('should ignore soft deleted courses', async () => {
       await service.remove('category-1');
 
       expect(mockCoursesRepo.exists).toHaveBeenCalledWith({
         where: { categoryId: 'category-1' },
-        withDeleted: true,
       });
     });
 
-    it('should reject deleting a category with courses', async () => {
+    it('should reject deleting a category with active courses', async () => {
       mockCoursesRepo.exists.mockResolvedValue(true);
 
       await expect(service.remove('category-1')).rejects.toThrow(
         ConflictException,
       );
-      expect(mockCategoriesRepo.remove).not.toHaveBeenCalled();
-    });
-
-    it('should return conflict when a course is added during the delete', async () => {
-      mockCategoriesRepo.remove.mockRejectedValue(databaseError('23503'));
-
-      await expect(service.remove('category-1')).rejects.toThrow(
-        ConflictException,
-      );
+      expect(mockCategoriesRepo.softRemove).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException for an unknown category', async () => {

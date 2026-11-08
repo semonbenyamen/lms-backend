@@ -18,7 +18,6 @@ import { UpdateCategoryDto } from './dto/update-category.dto.js';
 import { Category } from './entities/category.entity.js';
 
 const UNIQUE_VIOLATION = '23505';
-const FOREIGN_KEY_VIOLATION = '23503';
 
 @Injectable()
 export class CategoriesService {
@@ -80,25 +79,16 @@ export class CategoriesService {
   async remove(id: string): Promise<void> {
     const category = await this.findById(id);
 
-    // Soft deleted courses still reference the category, so they count too.
-    const hasCourses = await this.coursesRepository.exists({
+    // TypeORM excludes soft deleted courses unless withDeleted is requested.
+    const hasActiveCourses = await this.coursesRepository.exists({
       where: { categoryId: id },
-      withDeleted: true,
     });
 
-    if (hasCourses) {
-      throw new ConflictException('This category has courses');
+    if (hasActiveCourses) {
+      throw new ConflictException('This category has active courses');
     }
 
-    try {
-      await this.categoriesRepository.remove(category);
-    } catch (error) {
-      // A course may be added between the check and the delete.
-      if (this.isDatabaseError(error, FOREIGN_KEY_VIOLATION)) {
-        throw new ConflictException('This category has courses');
-      }
-      throw error;
-    }
+    await this.categoriesRepository.softRemove(category);
   }
 
   async assertExists(id: string): Promise<void> {

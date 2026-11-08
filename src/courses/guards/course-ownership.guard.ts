@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { isUUID } from 'class-validator';
 import { Repository } from 'typeorm';
 
 import { AuthenticatedRequest } from '../../auth/types/authenticated-request.type.js';
@@ -27,8 +28,8 @@ export class CourseOwnershipGuard implements CanActivate {
     const user = request.user;
     const courseId = request.params?.id;
 
-    // Ensure the course ID is a single string.
-    if (typeof courseId !== 'string' || !courseId) {
+    // Guards run before ParseUUIDPipe, so a bad id must not reach the query.
+    if (typeof courseId !== 'string' || !isUUID(courseId)) {
       throw new BadRequestException('Invalid course ID');
     }
 
