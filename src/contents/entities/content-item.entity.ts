@@ -1,6 +1,4 @@
-
 import {
-  Check,
   Column,
   CreateDateColumn,
   DeleteDateColumn,
@@ -8,7 +6,6 @@ import {
   Index,
   JoinColumn,
   ManyToOne,
-  OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
@@ -16,7 +13,6 @@ import type { Relation } from 'typeorm';
 
 import { ContentType } from '../../common/enums/content-type.enum.js';
 import { Lesson } from '../../lessons/entities/lesson.entity.js';
-import { ContentFile } from './content-file.entity.js';
 
 @Entity('content_items')
 // Unique among non-deleted items, so a deleted item frees its order.
@@ -38,7 +34,7 @@ export class ContentItem {
   @JoinColumn({ name: 'lesson_id' })
   lesson: Relation<Lesson>;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ length: 255 })
   title: string;
 
   @Column({
@@ -52,12 +48,7 @@ export class ContentItem {
   @Column({ name: 'body_text', type: 'text', nullable: true })
   bodyText: string | null;
 
-  @Column({
-    name: 'video_url',
-    type: 'varchar',
-    length: 2048,
-    nullable: true,
-  })
+  @Column({ name: 'video_url', type: 'varchar', length: 2048, nullable: true })
   videoUrl: string | null;
 
   @Column({ name: 'image_url', type: 'varchar', length: 2048, nullable: true })

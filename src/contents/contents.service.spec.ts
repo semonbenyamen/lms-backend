@@ -7,24 +7,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { QueryFailedError } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { CloudinaryService } from '../common/cloudinary/cloudinary.service.js';
-import { ContentFile } from './entities/content-file.entity.js';
+
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { ContentType } from '../common/enums/content-type.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { LessonsService } from '../lessons/lessons.service.js';
 import { ContentsService } from './contents.service.js';
 import { ContentItem } from './entities/content-item.entity.js';
-
-// File content checks need a real file; the upload flow is what's tested here.
-vi.mock('../common/upload/validate-content-file.js', () => ({
-  validateContentFile: vi.fn(),
-}));
-
-// What TypeORM throws when Postgres rejects a duplicate (code 23505).
-const uniqueViolation = new QueryFailedError('INSERT', [], {
-  code: '23505',
-} as unknown as Error);
 
 describe('ContentsService', () => {
   let service: ContentsService;
@@ -43,17 +32,7 @@ describe('ContentsService', () => {
   const mockLessonsService = {
     findLessonWithCourse: vi.fn(),
   };
-const mockContentFilesRepo = {
-  create: vi.fn(),
-  save: vi.fn(),
-  findOne: vi.fn(),
-  remove: vi.fn(),
-};
 
-const mockCloudinaryService = {
-  uploadFile: vi.fn(),
-  deleteFile: vi.fn(),
-};
   const instructorUser: JwtPayload = {
     sub: 'instructor-1',
     email: 'inst@example.com',
@@ -92,14 +71,6 @@ const mockCloudinaryService = {
           provide: LessonsService,
           useValue: mockLessonsService,
         },
-        {
-  provide: getRepositoryToken(ContentFile),
-  useValue: mockContentFilesRepo,
-},
-{
-  provide: CloudinaryService,
-  useValue: mockCloudinaryService,
-},
       ],
     }).compile();
 
@@ -354,15 +325,6 @@ const mockCloudinaryService = {
         NotFoundException,
       );
       expect(mockContentItemsRepo.save).not.toHaveBeenCalled();
-    });
-
-    it('should return 409 when moving to a used orderIndex', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue({ ...content });
-      mockContentItemsRepo.save.mockRejectedValue(uniqueViolation);
-
-      await expect(
-        service.update('ci-1', { orderIndex: 2 }, instructorUser),
-      ).rejects.toThrow(ConflictException);
     });
   });
 

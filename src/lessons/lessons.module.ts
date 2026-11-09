@@ -16,4 +16,3 @@ import { SectionLessonsController } from './section-lessons.controller.js';
   exports: [LessonsService],
 })
 export class LessonsModule {}
- 

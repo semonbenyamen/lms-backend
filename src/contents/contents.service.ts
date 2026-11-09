@@ -4,9 +4,6 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-
-import { validateContentFile } from '../common/upload/validate-content-file.js';
-import { ContentType } from '../common/enums/content-type.enum.js';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -25,7 +22,6 @@ import { CreateContentItemDto } from './dto/create-content-item.dto.js';
 import { UpdateContentItemDto } from './dto/update-content-item.dto.js';
 import { ContentItem } from './entities/content-item.entity.js';
 import { toContentItemResponseDto } from './transformers/content-item-response.transformer.js';
-
 
 @Injectable()
 export class ContentsService {
@@ -47,7 +43,6 @@ export class ContentsService {
 
     await this.saveContentItem(contentItem);
   }
-}
 
   async getContent(
     id: string,

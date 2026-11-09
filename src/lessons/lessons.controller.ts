@@ -44,30 +44,6 @@ export class LessonsController {
     });
   }
 
-  @Get('sections/:sectionId')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'List all lessons in a section/section' })
-  @ApiSuccessResponse(LessonResponseDto, HttpStatus.OK, { isArray: true })
-  @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: 'Invalid UUID format',
-  })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'Authentication required',
-  })
-  @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: 'Section/section not found',
-  })
-  findBySection(
-    @Param('sectionId', new ParseUUIDPipe()) sectionId: string,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    return this.lessonsService.findBySection(sectionId, request.user);
-  }
-
   @Patch(':id')
   // Decorators apply bottom up, so this guard runs after the ones in Auth.
   @UseGuards(LessonOwnershipGuard)

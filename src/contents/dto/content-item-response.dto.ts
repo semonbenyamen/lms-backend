@@ -15,11 +15,7 @@ export class ContentItemResponseDto {
   @ApiProperty({ example: ContentType.VIDEO, enum: ContentType })
   contentType: ContentType;
 
-  @ApiPropertyOptional({
-    example: 'Lecture notes...',
-    description: 'Text content, or the transcript of a video',
-    nullable: true,
-  })
+  @ApiPropertyOptional({ example: 'Lecture notes...', nullable: true })
   bodyText?: string | null;
 
   @ApiPropertyOptional({

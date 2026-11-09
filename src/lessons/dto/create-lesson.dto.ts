@@ -17,7 +17,7 @@ export class CreateLessonDto {
 
   @ApiProperty({
     example: 1,
-    description: 'Order index of the lesson within the section',
+    description: 'Order index of the lesson within the section/module',
     minimum: 0,
   })
   @Type(() => Number)

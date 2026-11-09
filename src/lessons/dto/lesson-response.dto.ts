@@ -1,5 +1,4 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ContentItemResponseDto } from '../../contents/dto/content-item-response.dto.js';
 
 import { ContentItemResponseDto } from '../../contents/dto/content-item-response.dto.js';
 
@@ -20,9 +19,6 @@ export class LessonResponseDto {
     type: () => [ContentItemResponseDto],
     description: 'Returned only with the lesson details, ordered by position',
   })
-  contentItems?: ContentItemResponseDto[];
-
-  @ApiPropertyOptional({ type: () => [ContentItemResponseDto] })
   contentItems?: ContentItemResponseDto[];
 
   @ApiProperty({ example: '2026-10-11T00:00:00.000Z' })

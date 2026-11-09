@@ -10,7 +10,6 @@ import { ContentsService } from './contents.service.js';
 import { ContentOwnershipGuard } from './guards/content-ownership.guard.js';
 
 describe('ContentsController', () => {
-  let lessonContentsController: LessonContentsController;
   let controller: ContentsController;
 
   const mockContentsService = {
@@ -31,7 +30,7 @@ describe('ContentsController', () => {
     vi.clearAllMocks();
 
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [LessonContentsController, ContentsController],
+      controllers: [ContentsController],
       providers: [
         {
           provide: ContentsService,
@@ -47,9 +46,6 @@ describe('ContentsController', () => {
       .useValue({ canActivate: () => true })
       .compile();
 
-    lessonContentsController = module.get<LessonContentsController>(
-      LessonContentsController,
-    );
     controller = module.get<ContentsController>(ContentsController);
   });
 

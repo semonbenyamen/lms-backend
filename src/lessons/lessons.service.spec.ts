@@ -38,13 +38,6 @@ describe('LessonsService', () => {
     findSectionWithCourse: vi.fn(),
   };
 
-  const mockContentItemsRepo = {
-    create: vi.fn(),
-    save: vi.fn(),
-    findOne: vi.fn(),
-    remove: vi.fn(),
-  };
-
   const instructorUser: JwtPayload = {
     sub: 'instructor-1',
     email: 'inst@example.com',
@@ -86,10 +79,6 @@ describe('LessonsService', () => {
         {
           provide: SectionsService,
           useValue: mockSectionsService,
-        },
-        {
-          provide: getRepositoryToken(ContentItem),
-          useValue: mockContentItemsRepo,
         },
       ],
     }).compile();
@@ -417,32 +406,6 @@ describe('LessonsService', () => {
       );
 
       expect(mockLessonsRepo.softRemove).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('content items on lesson', () => {
-    const lesson = {
-      id: 'lesson-1',
-      section: {
-        course: { instructorId: instructorUser.sub },
-      },
-    };
-
-    it('should allow owner to add content item to lesson', async () => {
-      mockLessonsRepo.findOne.mockResolvedValue(lesson);
-      const content = {
-        id: 'ci-1',
-        lessonId: 'lesson-1',
-        title: 'Video',
-        contentType: ContentType.VIDEO,
-        orderIndex: 1,
-      };
-      mockContentItemsRepo.create.mockReturnValue(content);
-      mockContentItemsRepo.save.mockResolvedValue(content);
-
-   
-
-     
     });
   });
 });
