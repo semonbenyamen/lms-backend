@@ -9,6 +9,8 @@ import { QueryFailedError } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
+import { CloudinaryService } from '../common/cloudinary/cloudinary.service.js';
+import { CloudinaryResourceType } from '../common/enums/cloudinary-resource-type.enum.js';
 import { ContentType } from '../common/enums/content-type.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { LessonsService } from '../lessons/lessons.service.js';
@@ -31,6 +33,10 @@ describe('ContentsService', () => {
 
   const mockLessonsService = {
     findLessonWithCourse: vi.fn(),
+  };
+
+  const mockCloudinaryService = {
+    createUploadSignature: vi.fn(),
   };
 
   const instructorUser: JwtPayload = {
@@ -71,10 +77,43 @@ describe('ContentsService', () => {
           provide: LessonsService,
           useValue: mockLessonsService,
         },
+        {
+          provide: CloudinaryService,
+          useValue: mockCloudinaryService,
+        },
       ],
     }).compile();
 
     service = module.get<ContentsService>(ContentsService);
+  });
+
+  describe('createUploadSignature', () => {
+    it('should sign a public id inside the lesson folder', () => {
+      const signature = { publicId: 'signed-id', signature: 'abc' };
+      mockCloudinaryService.createUploadSignature.mockReturnValue(signature);
+
+      const result = service.createUploadSignature(
+        'l-1',
+        CloudinaryResourceType.VIDEO,
+      );
+
+      expect(result).toBe(signature);
+      expect(mockCloudinaryService.createUploadSignature).toHaveBeenCalledWith(
+        expect.stringMatching(/^lms\/lessons\/l-1\/[0-9a-f-]{36}$/),
+        CloudinaryResourceType.VIDEO,
+      );
+    });
+
+    it('should give every upload its own public id', () => {
+      service.createUploadSignature('l-1', CloudinaryResourceType.IMAGE);
+      service.createUploadSignature('l-1', CloudinaryResourceType.IMAGE);
+
+      const [first, second] =
+        mockCloudinaryService.createUploadSignature.mock.calls.map(
+          ([publicId]) => publicId as string,
+        );
+      expect(first).not.toBe(second);
+    });
   });
 
   describe('create', () => {

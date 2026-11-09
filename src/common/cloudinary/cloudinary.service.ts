@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary } from 'cloudinary';
 
@@ -31,7 +31,6 @@ export interface CloudinaryUploadSignature {
 // filter turns them into 500 responses.
 @Injectable()
 export class CloudinaryService {
-  private readonly logger = new Logger(CloudinaryService.name);
   private readonly cloudName: string;
   private readonly apiKey: string;
   private readonly apiSecret: string;
@@ -130,10 +129,9 @@ export class CloudinaryService {
 
     // A file that is already gone counts as deleted.
     if (result.result !== 'ok' && result.result !== 'not found') {
-      this.logger.error(
-        `Unexpected Cloudinary delete result: ${JSON.stringify(result)}`,
-      );
-      throw new Error('Failed to delete the file from Cloudinary');
+      throw new Error('Failed to delete the file from Cloudinary', {
+        cause: result,
+      });
     }
   }
 

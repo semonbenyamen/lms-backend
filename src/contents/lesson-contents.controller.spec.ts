@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import type { AuthenticatedRequest } from '../auth/types/authenticated-request.type.js';
+import { CloudinaryResourceType } from '../common/enums/cloudinary-resource-type.enum.js';
 import { ContentType } from '../common/enums/content-type.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { ContentsService } from './contents.service.js';
@@ -16,6 +17,7 @@ describe('LessonContentsController', () => {
   const mockContentsService = {
     create: vi.fn(),
     findByLesson: vi.fn(),
+    createUploadSignature: vi.fn(),
   };
 
   const mockReq: AuthenticatedRequest = {
@@ -77,5 +79,20 @@ describe('LessonContentsController', () => {
       role: mockReq.user.role,
     });
     expect(result).toEqual(contentItems);
+  });
+
+  it('should return the upload signature for the lesson from the route', () => {
+    const signature = { publicId: 'lms/lessons/l-1/file', signature: 'abc' };
+    mockContentsService.createUploadSignature.mockReturnValue(signature);
+
+    const result = controller.createUploadSignature('l-1', {
+      resourceType: CloudinaryResourceType.IMAGE,
+    });
+
+    expect(result).toBe(signature);
+    expect(mockContentsService.createUploadSignature).toHaveBeenCalledWith(
+      'l-1',
+      CloudinaryResourceType.IMAGE,
+    );
   });
 });

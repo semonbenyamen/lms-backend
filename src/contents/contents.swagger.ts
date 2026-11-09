@@ -3,6 +3,7 @@ import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 
 import { ApiAuthErrorResponses } from '../common/decorators/api-error-responses.decorator.js';
 import { ApiSuccessResponse } from '../common/decorators/api-success-response.decorator.js';
+import { UploadSignatureResponseDto } from '../common/cloudinary/dto/upload-signature-response.dto.js';
 import { ApiResponseDto } from '../common/dto/api-response.dto.js';
 import { ContentItemResponseDto } from './dto/content-item-response.dto.js';
 
@@ -78,5 +79,20 @@ export const ApiDeleteContent = () =>
       [HttpStatus.BAD_REQUEST]: 'Invalid UUID format',
       [HttpStatus.FORBIDDEN]: NOT_COURSE_OWNER,
       [HttpStatus.NOT_FOUND]: 'Content item not found',
+    }),
+  );
+
+export const ApiCreateUploadSignature = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: 'Sign a file upload to Cloudinary for a lesson (Owner or Admin)',
+      description:
+        'Upload the file to Cloudinary with these values, then send publicId as mediaPublicId when creating or updating the content item.',
+    }),
+    ApiSuccessResponse(UploadSignatureResponseDto, HttpStatus.OK),
+    ApiAuthErrorResponses({
+      [HttpStatus.BAD_REQUEST]: 'Invalid UUID format or resourceType',
+      [HttpStatus.FORBIDDEN]: NOT_COURSE_OWNER,
+      [HttpStatus.NOT_FOUND]: 'Lesson not found',
     }),
   );

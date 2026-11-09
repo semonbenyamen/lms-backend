@@ -1,4 +1,3 @@
-import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { v2 as cloudinary } from 'cloudinary';
@@ -164,21 +163,16 @@ describe('CloudinaryService', () => {
       ).resolves.toBeUndefined();
     });
 
-    it('should log and throw when Cloudinary returns another result', async () => {
-      // Keeps the expected error log out of the test output.
-      const logError = vi
-        .spyOn(Logger.prototype, 'error')
-        .mockImplementation(() => undefined);
-      vi.mocked(cloudinary.uploader.destroy).mockResolvedValue({
-        result: 'error',
-      });
+    it('should throw with the result as the cause for another result', async () => {
+      const failure = { result: 'error' };
+      vi.mocked(cloudinary.uploader.destroy).mockResolvedValue(failure);
 
       await expect(
         service.deleteFile(publicId, CloudinaryResourceType.IMAGE),
-      ).rejects.toThrow('Failed to delete the file from Cloudinary');
-      expect(logError).toHaveBeenCalled();
-
-      logError.mockRestore();
+      ).rejects.toMatchObject({
+        message: 'Failed to delete the file from Cloudinary',
+        cause: failure,
+      });
     });
 
     it('should throw a plain error with the cause when the call fails', async () => {

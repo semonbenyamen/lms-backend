@@ -54,6 +54,17 @@ export class ContentItem {
   @Column({ name: 'image_url', type: 'varchar', length: 2048, nullable: true })
   imageUrl: string | null;
 
+  // The Cloudinary file behind videoUrl or imageUrl, null for external links.
+  // Deleted items keep their file, so a file never moves to another item.
+  @Index('UQ_content_items_media_public_id', { unique: true })
+  @Column({
+    name: 'media_public_id',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
+  mediaPublicId: string | null;
+
   @Column({ name: 'duration_seconds', type: 'int', nullable: true })
   durationSeconds: number | null;
 

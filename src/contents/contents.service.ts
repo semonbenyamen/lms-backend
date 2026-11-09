@@ -5,11 +5,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomUUID } from 'node:crypto';
 import { Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { canReadCourse } from '../common/authorization/authorization.util.js';
+import { CloudinaryService } from '../common/cloudinary/cloudinary.service.js';
+import { UploadSignatureResponseDto } from '../common/cloudinary/dto/upload-signature-response.dto.js';
 import { isUniqueViolation } from '../common/database/is-unique-violation.js';
+import { CloudinaryResourceType } from '../common/enums/cloudinary-resource-type.enum.js';
 import { ContentType } from '../common/enums/content-type.enum.js';
 import { LessonsService } from '../lessons/lessons.service.js';
 import {
@@ -23,13 +27,30 @@ import { UpdateContentItemDto } from './dto/update-content-item.dto.js';
 import { ContentItem } from './entities/content-item.entity.js';
 import { toContentItemResponseDto } from './transformers/content-item-response.transformer.js';
 
+// Every file uploaded for a lesson starts with this prefix.
+export const lessonMediaPrefix = (lessonId: string): string =>
+  `lms/lessons/${lessonId}/`;
+
 @Injectable()
 export class ContentsService {
   constructor(
     @InjectRepository(ContentItem)
     private readonly contentItemsRepository: Repository<ContentItem>,
     private readonly lessonsService: LessonsService,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
+
+  // Ownership of the lesson is verified by ContentOwnershipGuard before this runs.
+  // The lesson id in the public id ties the uploaded file to this lesson.
+  createUploadSignature(
+    lessonId: string,
+    resourceType: CloudinaryResourceType,
+  ): UploadSignatureResponseDto {
+    return this.cloudinaryService.createUploadSignature(
+      `${lessonMediaPrefix(lessonId)}${randomUUID()}`,
+      resourceType,
+    );
+  }
 
   // Ownership of the lesson is verified by ContentOwnershipGuard before this runs.
   async create(lessonId: string, dto: CreateContentItemDto): Promise<void> {
