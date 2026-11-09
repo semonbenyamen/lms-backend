@@ -13,7 +13,7 @@ describe('ContentsController', () => {
   let controller: ContentsController;
 
   const mockContentsService = {
-    findById: vi.fn(),
+    getContent: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
   };
@@ -49,21 +49,18 @@ describe('ContentsController', () => {
     controller = module.get<ContentsController>(ContentsController);
   });
 
-  it('should return the content item without internal relations', async () => {
-    mockContentsService.findById.mockResolvedValue({
-      id: 'ci-1',
-      lessonId: 'l-1',
-      lesson: { section: { course: { instructorId: 'instructor-1' } } },
-    });
+  it('should return the content item from the service', async () => {
+    const contentItem = { id: 'ci-1', lessonId: 'l-1' };
+    mockContentsService.getContent.mockResolvedValue(contentItem);
 
     const result = await controller.findOne('ci-1', mockReq);
 
-    expect(mockContentsService.findById).toHaveBeenCalledWith(
-      'ci-1',
-      mockReq.user,
-    );
-    expect(result).toMatchObject({ id: 'ci-1', lessonId: 'l-1' });
-    expect(result).not.toHaveProperty('lesson');
+    // Only the id and role of the user are passed on.
+    expect(mockContentsService.getContent).toHaveBeenCalledWith('ci-1', {
+      sub: 'instructor-1',
+      role: UserRole.INSTRUCTOR,
+    });
+    expect(result).toEqual(contentItem);
   });
 
   it('should update the content item without returning data', async () => {

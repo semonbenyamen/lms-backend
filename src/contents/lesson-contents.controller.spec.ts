@@ -66,18 +66,16 @@ describe('LessonContentsController', () => {
   });
 
   it('should list the content items of the lesson', async () => {
-    mockContentsService.findByLesson.mockResolvedValue([
-      { id: 'ci-1', lesson: { id: 'l-1' } },
-    ]);
+    const contentItems = [{ id: 'ci-1', lessonId: 'l-1' }];
+    mockContentsService.findByLesson.mockResolvedValue(contentItems);
 
     const result = await controller.findByLesson('l-1', mockReq);
 
-    expect(mockContentsService.findByLesson).toHaveBeenCalledWith(
-      'l-1',
-      mockReq.user,
-    );
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ id: 'ci-1' });
-    expect(result[0]).not.toHaveProperty('lesson');
+    // Only the id and role of the user are passed on.
+    expect(mockContentsService.findByLesson).toHaveBeenCalledWith('l-1', {
+      sub: mockReq.user.sub,
+      role: mockReq.user.role,
+    });
+    expect(result).toEqual(contentItems);
   });
 });

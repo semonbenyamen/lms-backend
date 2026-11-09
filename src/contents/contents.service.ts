@@ -17,9 +17,11 @@ import {
   pickTypeFields,
   TypeFieldValues,
 } from './content-type-fields.js';
+import { ContentItemResponseDto } from './dto/content-item-response.dto.js';
 import { CreateContentItemDto } from './dto/create-content-item.dto.js';
 import { UpdateContentItemDto } from './dto/update-content-item.dto.js';
 import { ContentItem } from './entities/content-item.entity.js';
+import { toContentItemResponseDto } from './transformers/content-item-response.transformer.js';
 
 @Injectable()
 export class ContentsService {
@@ -43,43 +45,50 @@ export class ContentsService {
     await this.saveContentItem(contentItem);
   }
 
-  async findById(
+  async getContent(
     id: string,
     user: Pick<JwtPayload, 'sub' | 'role'>,
-  ): Promise<ContentItem> {
+  ): Promise<ContentItemResponseDto> {
     const contentItem = await this.contentItemsRepository.findOne({
       where: { id },
       relations: { lesson: { section: { course: true } } },
     });
 
-    // A draft course's content looks missing to users who cannot read it.
-    const course = contentItem?.lesson?.section?.course;
-    if (!contentItem || !course || !canReadCourse(course, user)) {
+    // Deleting a lesson, section or course soft deletes its content items, so
+    // a found item has a course. A draft course's content looks missing to
+    // users who cannot read it.
+    if (
+      !contentItem ||
+      !canReadCourse(contentItem.lesson.section.course, user)
+    ) {
       throw new NotFoundException(`Content item with ID ${id} not found`);
     }
 
-    return contentItem;
+    return toContentItemResponseDto(contentItem);
   }
 
   async findByLesson(
     lessonId: string,
     user: Pick<JwtPayload, 'sub' | 'role'>,
-  ): Promise<ContentItem[]> {
+  ): Promise<ContentItemResponseDto[]> {
     const lesson = await this.lessonsRepository.findOne({
       where: { id: lessonId },
       relations: { section: { course: true } },
     });
 
-    const course = lesson?.section?.course;
-    if (!course || !canReadCourse(course, user)) {
+    // Deleting a section or course soft deletes its lessons, so a found lesson
+    // has a course.
+    if (!lesson || !canReadCourse(lesson.section.course, user)) {
       throw new NotFoundException(`Lesson with ID ${lessonId} not found`);
     }
 
     // A lesson has few items, so they are returned in one ordered list.
-    return this.contentItemsRepository.find({
+    const contentItems = await this.contentItemsRepository.find({
       where: { lessonId },
       order: { orderIndex: 'ASC' },
     });
+
+    return contentItems.map(toContentItemResponseDto);
   }
 
   // Ownership is verified by ContentOwnershipGuard before this runs.

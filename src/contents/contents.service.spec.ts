@@ -147,7 +147,7 @@ describe('ContentsService', () => {
     Object.assign(new Error('duplicate key'), { code: '23505' }),
   );
 
-  describe('findById', () => {
+  describe('getContent', () => {
     const publishedContent = {
       id: 'ci-1',
       title: 'Published Content',
@@ -171,14 +171,17 @@ describe('ContentsService', () => {
     it('should return published content to student', async () => {
       mockContentItemsRepo.findOne.mockResolvedValue(publishedContent);
 
-      const result = await service.findById('ci-1', studentUser);
-      expect(result).toEqual(publishedContent);
+      const result = await service.getContent('ci-1', studentUser);
+
+      // The response keeps the public fields and drops the relations.
+      expect(result).toEqual({ id: 'ci-1', title: 'Published Content' });
+      expect(result).not.toHaveProperty('lesson');
     });
 
     it('should throw NotFoundException to student for draft content', async () => {
       mockContentItemsRepo.findOne.mockResolvedValue(draftContent);
 
-      await expect(service.findById('ci-2', studentUser)).rejects.toThrow(
+      await expect(service.getContent('ci-2', studentUser)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -187,28 +190,27 @@ describe('ContentsService', () => {
       mockContentItemsRepo.findOne.mockResolvedValue(draftContent);
 
       await expect(
-        service.findById('ci-2', otherInstructorUser),
+        service.getContent('ci-2', otherInstructorUser),
       ).rejects.toThrow(NotFoundException);
     });
 
     it('should return draft content to the owner and to admins', async () => {
       mockContentItemsRepo.findOne.mockResolvedValue(draftContent);
 
-      await expect(service.findById('ci-2', instructorUser)).resolves.toEqual(
-        draftContent,
+      const expected = { id: 'ci-2', title: 'Draft Content' };
+
+      await expect(service.getContent('ci-2', instructorUser)).resolves.toEqual(
+        expected,
       );
-      await expect(service.findById('ci-2', adminUser)).resolves.toEqual(
-        draftContent,
+      await expect(service.getContent('ci-2', adminUser)).resolves.toEqual(
+        expected,
       );
     });
 
-    it('should throw NotFoundException when the course was soft deleted', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue({
-        ...publishedContent,
-        lesson: { section: { course: null } },
-      });
+    it('should throw NotFoundException when the content item does not exist', async () => {
+      mockContentItemsRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.findById('ci-1', adminUser)).rejects.toThrow(
+      await expect(service.getContent('ci-1', adminUser)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -333,7 +335,9 @@ describe('ContentsService', () => {
     it('should throw NotFoundException when the content item does not exist', async () => {
       mockContentItemsRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.remove('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.remove('missing')).rejects.toThrow(
+        NotFoundException,
+      );
       expect(mockContentItemsRepo.softRemove).not.toHaveBeenCalled();
     });
   });
