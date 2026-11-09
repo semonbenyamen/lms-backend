@@ -1,235 +1,150 @@
-
-import {
-  BadRequestException,
-  Injectable,
-  InternalServerErrorException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary } from 'cloudinary';
-import { randomUUID } from 'node:crypto';
-import { ContentUploadResourceType } from '../enums/content-upload-resource-type.enum.js';
-const CLOUDINARY_UPLOAD_TIMEOUT_MS = 120_000;
 
-type CloudinaryResourceType = 'image' | 'video' | 'raw';
+import { CloudinaryResourceType } from '../enums/cloudinary-resource-type.enum.js';
+import { UPLOAD_RULES } from './upload-rules.js';
 
-interface CloudinaryUploadResult {
-  secureUrl: string;
-  publicId: string;
-  resourceType: string;
-  bytes: number;
-  format?: string;
-}
+// A stuck Cloudinary call fails instead of keeping the request waiting.
+const CLOUDINARY_TIMEOUT_MS = 30_000;
 
 export interface CloudinaryAssetDetails {
   secureUrl: string;
   publicId: string;
   resourceType: string;
-  bytes: number;
   format: string;
-  originalFilename?: string;
+  bytes: number;
 }
 
-function isCloudinaryResourceType(
-  value: string,
-): value is CloudinaryResourceType {
-  return ['image', 'video', 'raw'].includes(value);
+export interface CloudinaryUploadSignature {
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  publicId: string;
+  resourceType: CloudinaryResourceType;
+  allowedFormats: string;
+  signature: string;
 }
 
+// Files are uploaded by the frontend with a signature, so this service only
+// signs, checks and deletes them. It throws plain errors; the exception
+// filter turns them into 500 responses.
 @Injectable()
 export class CloudinaryService {
   private readonly logger = new Logger(CloudinaryService.name);
+  private readonly cloudName: string;
+  private readonly apiKey: string;
+  private readonly apiSecret: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(configService: ConfigService) {
+    this.cloudName = configService.getOrThrow<string>('CLOUDINARY_CLOUD_NAME');
+    this.apiKey = configService.getOrThrow<string>('CLOUDINARY_API_KEY');
+    this.apiSecret = configService.getOrThrow<string>('CLOUDINARY_API_SECRET');
+
     cloudinary.config({
-      cloud_name: this.configService.getOrThrow<string>(
-        'CLOUDINARY_CLOUD_NAME',
-      ),
-      api_key: this.configService.getOrThrow<string>(
-        'CLOUDINARY_API_KEY',
-      ),
-      api_secret: this.configService.getOrThrow<string>(
-        'CLOUDINARY_API_SECRET',
-      ),
+      cloud_name: this.cloudName,
+      api_key: this.apiKey,
+      api_secret: this.apiSecret,
     });
   }
 
-  async uploadFile(
-    file: Express.Multer.File,
-    folder = 'lms/content',
-  ): Promise<CloudinaryUploadResult> {
-    return new Promise((resolve, reject) => {
-      let settled = false;
-
-      const fail = (error: unknown) => {
-        if (settled) return;
-
-        settled = true;
-
-        this.logger.error(
-          'Cloudinary upload failed',
-          error instanceof Error
-            ? error.stack
-            : String(error),
-        );
-
-        reject(
-          new InternalServerErrorException(
-            'Failed to upload file to Cloudinary',
-            { cause: error },
-          ),
-        );
-      };
-
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder,
-          resource_type: 'auto',
-          timeout: CLOUDINARY_UPLOAD_TIMEOUT_MS,
-        },
-        (error, result) => {
-          if (error || !result) {
-            fail(error ?? new Error('Empty Cloudinary upload response'));
-            return;
-          }
-
-          if (settled) return;
-          settled = true;
-
-          resolve({
-            secureUrl: result.secure_url,
-            publicId: result.public_id,
-            resourceType: result.resource_type,
-            bytes: result.bytes,
-            format: result.format,
-          });
-        },
-      );
-
-      uploadStream.on('error', (error: Error) => {
-        fail(error);
-      });
-
-      uploadStream.end(file.buffer);
-    });
-  }
-
-  async deleteFile(
+  // The caller builds the public id, so it can tell which lesson or course
+  // the file belongs to when the file comes back.
+  createUploadSignature(
     publicId: string,
-    resourceType: string,
-  ): Promise<void> {
-    if (!isCloudinaryResourceType(resourceType)) {
-      throw new BadRequestException(
-        'Invalid Cloudinary resource type',
-      );
-    }
+    resourceType: CloudinaryResourceType,
+  ): CloudinaryUploadSignature {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const allowedFormats = UPLOAD_RULES[resourceType].formats.join(',');
 
-    if (!publicId.trim()) {
-      throw new BadRequestException('Public ID is required');
-    }
+    // Every signed param must be sent by the frontend exactly as returned.
+    const signature = cloudinary.utils.api_sign_request(
+      {
+        timestamp,
+        public_id: publicId,
+        allowed_formats: allowedFormats,
+      },
+      this.apiSecret,
+    );
 
-    try {
-      const result = await cloudinary.uploader.destroy(publicId, {
-        resource_type: resourceType,
-        invalidate: true,
-      });
-
-      if (result.result === 'ok' || result.result === 'not found') {
-        return;
-      }
-
-      this.logger.error(
-        `Cloudinary delete returned unexpected result: ${JSON.stringify(result)}`,
-      );
-
-      throw new Error('Unexpected Cloudinary delete response');
-    } catch (error) {
-      this.logger.error(
-        'Cloudinary delete failed',
-        error instanceof Error ? error.stack : String(error),
-      );
-
-      throw new InternalServerErrorException(
-        'Failed to delete file from Cloudinary',
-        { cause: error },
-      );
-    }
+    return {
+      cloudName: this.cloudName,
+      apiKey: this.apiKey,
+      timestamp,
+      publicId,
+      resourceType,
+      allowedFormats,
+      signature,
+    };
   }
 
+  // Returns null when the file does not exist, so the caller decides the 400.
   async getAssetDetails(
     publicId: string,
-    resourceType: ContentUploadResourceType,
-  ): Promise<CloudinaryAssetDetails> {
+    resourceType: CloudinaryResourceType,
+  ): Promise<CloudinaryAssetDetails | null> {
     try {
       const result = await cloudinary.api.resource(publicId, {
         resource_type: resourceType,
         type: 'upload',
+        timeout: CLOUDINARY_TIMEOUT_MS,
       });
 
       return {
         secureUrl: result.secure_url,
         publicId: result.public_id,
         resourceType: result.resource_type,
-        bytes: result.bytes,
         format: result.format,
-        originalFilename: result.original_filename,
+        bytes: result.bytes,
       };
     } catch (error) {
-      const httpCode = (
-        error as { http_code?: number }
-      )?.http_code;
-
-      if (httpCode === 404) {
-        throw new BadRequestException(
-          'Uploaded file was not found in Cloudinary',
-        );
+      if (this.isNotFound(error)) {
+        return null;
       }
 
-      this.logger.error(
-        'Failed to retrieve Cloudinary asset',
-        error instanceof Error
-          ? error.stack
-          : String(error),
-      );
-
-      throw new InternalServerErrorException(
-        'Failed to verify uploaded file',
-        { cause: error },
-      );
+      throw new Error('Failed to get the file details from Cloudinary', {
+        cause: error,
+      });
     }
   }
 
-  createUploadSignature(
-    resourceType: ContentUploadResourceType,
-  ) {
-    const timestamp = Math.floor(Date.now() / 1000);
-
-    // Generated by the backend, never supplied by the client.
-    const publicId = `lms_content_pending_${randomUUID()}`;
-
-    const apiSecret = this.configService.getOrThrow<string>(
-      'CLOUDINARY_API_SECRET',
-    );
-
-    const signature = cloudinary.utils.api_sign_request(
-      {
-        timestamp,
-        public_id: publicId,
-      },
-      apiSecret,
-    );
-
-    return {
-      cloudName: this.configService.getOrThrow<string>(
-        'CLOUDINARY_CLOUD_NAME',
-      ),
-      apiKey: this.configService.getOrThrow<string>(
-        'CLOUDINARY_API_KEY',
-      ),
-      timestamp,
-      publicId,
-      resourceType,
-      signature,
+  async deleteFile(
+    publicId: string,
+    resourceType: CloudinaryResourceType,
+  ): Promise<void> {
+    // The SDK types miss timeout here, but the uploader reads it.
+    const options = {
+      resource_type: resourceType,
+      invalidate: true,
+      timeout: CLOUDINARY_TIMEOUT_MS,
     };
+    let result: { result?: string };
+
+    try {
+      result = await cloudinary.uploader.destroy(publicId, options);
+    } catch (error) {
+      throw new Error('Failed to delete the file from Cloudinary', {
+        cause: error,
+      });
+    }
+
+    // A file that is already gone counts as deleted.
+    if (result.result !== 'ok' && result.result !== 'not found') {
+      this.logger.error(
+        `Unexpected Cloudinary delete result: ${JSON.stringify(result)}`,
+      );
+      throw new Error('Failed to delete the file from Cloudinary');
+    }
+  }
+
+  // --- Helper Methods ---
+
+  private isNotFound(error: unknown): boolean {
+    // The Admin API rejects with { error: { http_code } } for a missing file.
+    const httpCode =
+      (error as { http_code?: number } | null)?.http_code ??
+      (error as { error?: { http_code?: number } } | null)?.error?.http_code;
+
+    return httpCode === 404;
   }
 }
