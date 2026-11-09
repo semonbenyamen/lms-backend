@@ -13,6 +13,8 @@ import { SectionsService } from '../sections/sections.service.js';
 import { CreateLessonDto } from './dto/create-lesson.dto.js';
 import { UpdateLessonDto } from './dto/update-lesson.dto.js';
 import { Lesson } from './entities/lesson.entity.js';
+import { LessonResponseDto } from './dto/lesson-response.dto.js';
+import { toLessonResponseDto } from './transformers/lesson-response.transformer.js';
 
 @Injectable()
 export class LessonsService {
@@ -22,34 +24,34 @@ export class LessonsService {
     private readonly sectionsService: SectionsService,
   ) {}
 
-  // Ownership is checked by LessonOwnershipGuard before these methods run.
-  async create(sectionId: string, dto: CreateLessonDto): Promise<Lesson> {
+  // Ownership is checked by LessonOwnershipGuard before this method runs.
+  async create(sectionId: string, dto: CreateLessonDto): Promise<void> {
     const lesson = this.lessonsRepository.create({
       sectionId,
       title: dto.title,
       orderIndex: dto.orderIndex,
     });
 
-    return this.saveLesson(lesson);
+    await this.saveLesson(lesson);
   }
 
   async findById(
     lessonId: string,
     user: Pick<JwtPayload, 'sub' | 'role'>,
-  ): Promise<Lesson> {
+  ): Promise<LessonResponseDto> {
     const lesson = await this.findLessonWithCourse(lessonId);
 
     if (!canReadCourse(lesson.section.course, user)) {
       throw new NotFoundException(`Lesson with ID ${lessonId} not found`);
     }
 
-    return lesson;
+    return toLessonResponseDto(lesson);
   }
 
   async findBySection(
     sectionId: string,
     user: Pick<JwtPayload, 'sub' | 'role'>,
-  ): Promise<Lesson[]> {
+  ): Promise<LessonResponseDto[]> {
     const section = await this.sectionsService.findSectionWithCourse(sectionId);
 
     // Check if the user can view the course.
@@ -57,22 +59,24 @@ export class LessonsService {
       throw new NotFoundException(`Section with ID ${sectionId} not found`);
     }
 
-    // Return all active lessons ordered by their position.
-    return this.lessonsRepository.find({
+    // Get all active lessons ordered by their position.
+    const lessons = await this.lessonsRepository.find({
       where: { sectionId },
       order: {
         orderIndex: 'ASC',
       },
     });
+
+    return lessons.map(toLessonResponseDto);
   }
 
-  async update(lessonId: string, dto: UpdateLessonDto): Promise<Lesson> {
+  async update(lessonId: string, dto: UpdateLessonDto): Promise<void> {
     const lesson = await this.findLessonWithCourse(lessonId);
 
     // Apply only the fields provided in the update request.
     this.lessonsRepository.merge(lesson, dto);
 
-    return this.saveLesson(lesson);
+    await this.saveLesson(lesson);
   }
 
   async remove(lessonId: string): Promise<void> {

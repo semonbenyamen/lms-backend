@@ -88,16 +88,17 @@ describe('LessonsService', () => {
       mockLessonsRepo.create.mockReturnValue(createdLesson);
       mockLessonsRepo.save.mockResolvedValue(createdLesson);
 
-      const result = await service.create('section-1', createDto);
+      await expect(
+        service.create('section-1', createDto),
+      ).resolves.toBeUndefined();
 
-      expect(mockLessonsRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sectionId: 'section-1',
-          title: createDto.title,
-        }),
-      );
+      expect(mockLessonsRepo.create).toHaveBeenCalledWith({
+        sectionId: 'section-1',
+        title: createDto.title,
+        orderIndex: createDto.orderIndex,
+      });
 
-      expect(result).toEqual(createdLesson);
+      expect(mockLessonsRepo.save).toHaveBeenCalledWith(createdLesson);
     });
 
     it('should throw ConflictException if the orderIndex is taken', async () => {
@@ -125,7 +126,11 @@ describe('LessonsService', () => {
   describe('findById', () => {
     const publishedLesson = {
       id: 'lesson-1',
+      sectionId: 'section-1',
       title: 'Lesson 1',
+      orderIndex: 1,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-02T00:00:00.000Z'),
       section: {
         course: {
           instructorId: instructorUser.sub,
@@ -136,6 +141,7 @@ describe('LessonsService', () => {
     };
 
     const unpublishedLesson = {
+      ...publishedLesson,
       id: 'lesson-2',
       title: 'Draft Lesson',
       section: {
@@ -144,7 +150,21 @@ describe('LessonsService', () => {
           isPublished: false,
         },
       },
-      contentItems: [],
+    };
+
+    const expectedPublishedLesson = {
+      id: publishedLesson.id,
+      sectionId: publishedLesson.sectionId,
+      title: publishedLesson.title,
+      orderIndex: publishedLesson.orderIndex,
+      createdAt: publishedLesson.createdAt,
+      updatedAt: publishedLesson.updatedAt,
+    };
+
+    const expectedUnpublishedLesson = {
+      ...expectedPublishedLesson,
+      id: unpublishedLesson.id,
+      title: unpublishedLesson.title,
     };
 
     it('should return published lesson to students', async () => {
@@ -152,7 +172,7 @@ describe('LessonsService', () => {
 
       const result = await service.findById('lesson-1', studentUser);
 
-      expect(result).toEqual(publishedLesson);
+      expect(result).toEqual(expectedPublishedLesson);
     });
 
     it('should throw NotFoundException for students when course is unpublished', async () => {
@@ -168,7 +188,7 @@ describe('LessonsService', () => {
 
       const result = await service.findById('lesson-2', instructorUser);
 
-      expect(result).toEqual(unpublishedLesson);
+      expect(result).toEqual(expectedUnpublishedLesson);
     });
 
     it('should return unpublished lesson to admin', async () => {
@@ -176,7 +196,7 @@ describe('LessonsService', () => {
 
       const result = await service.findById('lesson-2', adminUser);
 
-      expect(result).toEqual(unpublishedLesson);
+      expect(result).toEqual(expectedUnpublishedLesson);
     });
 
     it('should throw NotFoundException when lesson does not exist', async () => {
@@ -222,19 +242,35 @@ describe('LessonsService', () => {
 
       const result = await service.findBySection('section-1', instructorUser);
 
-      expect(mockLessonsRepo.find).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { sectionId: 'section-1' },
-        }),
-      );
+      expect(mockLessonsRepo.find).toHaveBeenCalledWith({
+        where: { sectionId: 'section-1' },
+        order: { orderIndex: 'ASC' },
+      });
 
       expect(result).toEqual([]);
     });
 
     it('should return all lessons without pagination', async () => {
+      const createdAt = new Date('2026-01-01T00:00:00.000Z');
+      const updatedAt = new Date('2026-01-02T00:00:00.000Z');
+
       const lessons = [
-        { id: 'lesson-1', sectionId: 'section-1', orderIndex: 1 },
-        { id: 'lesson-2', sectionId: 'section-1', orderIndex: 2 },
+        {
+          id: 'lesson-1',
+          sectionId: 'section-1',
+          title: 'Lesson 1',
+          orderIndex: 1,
+          createdAt,
+          updatedAt,
+        },
+        {
+          id: 'lesson-2',
+          sectionId: 'section-1',
+          title: 'Lesson 2',
+          orderIndex: 2,
+          createdAt,
+          updatedAt,
+        },
       ];
 
       mockSectionsService.findSectionWithCourse.mockResolvedValue(section);
@@ -242,9 +278,25 @@ describe('LessonsService', () => {
 
       const result = await service.findBySection('section-1', studentUser);
 
-      expect(result).toEqual(lessons);
+      expect(result).toEqual([
+        {
+          id: 'lesson-1',
+          sectionId: 'section-1',
+          title: 'Lesson 1',
+          orderIndex: 1,
+          createdAt,
+          updatedAt,
+        },
+        {
+          id: 'lesson-2',
+          sectionId: 'section-1',
+          title: 'Lesson 2',
+          orderIndex: 2,
+          createdAt,
+          updatedAt,
+        },
+      ]);
 
-      // Verify that lessons are ordered without pagination.
       expect(mockLessonsRepo.find).toHaveBeenCalledWith({
         where: { sectionId: 'section-1' },
         order: { orderIndex: 'ASC' },
@@ -281,13 +333,20 @@ describe('LessonsService', () => {
       mockLessonsRepo.findOne.mockResolvedValue({ ...lesson });
       mockLessonsRepo.save.mockImplementation((l) => Promise.resolve(l));
 
-      const updated = await service.update('lesson-1', { title: 'New Title' });
+      await expect(
+        service.update('l-1', { title: 'New Title' }),
+      ).resolves.toBeUndefined();
 
-      expect(mockLessonsRepo.merge).toHaveBeenCalledWith(expect.anything(), {
-        title: 'New Title',
-      });
+      expect(mockLessonsRepo.merge).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'lesson-1' }),
+        { title: 'New Title' },
+      );
 
-      expect(updated.title).toBe('New Title');
+      expect(mockLessonsRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'New Title',
+        }),
+      );
     });
 
     it('should throw NotFoundException when the lesson does not exist', async () => {
@@ -298,6 +357,7 @@ describe('LessonsService', () => {
       ).rejects.toThrow(NotFoundException);
 
       expect(mockLessonsRepo.merge).not.toHaveBeenCalled();
+      expect(mockLessonsRepo.save).not.toHaveBeenCalled();
     });
   });
 

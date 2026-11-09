@@ -28,7 +28,6 @@ import { CreateLessonDto } from './dto/create-lesson.dto.js';
 import { LessonResponseDto } from './dto/lesson-response.dto.js';
 import { LessonOwnershipGuard } from './guards/lesson-ownership.guard.js';
 import { LessonsService } from './lessons.service.js';
-import { toLessonResponseDto } from './transformers/lesson-response.transformer.js';
 
 // Routes that need the parent section: create and list.
 @ApiTags('Lessons')
@@ -75,13 +74,10 @@ export class SectionLessonsController {
   async findBySection(
     @Param('sectionId', new ParseUUIDPipe()) sectionId: string,
     @Req() request: AuthenticatedRequest,
-  ) {
-    const { sub, role } = request.user;
-    const lessons = await this.lessonsService.findBySection(sectionId, {
-      sub,
-      role,
+  ): Promise<LessonResponseDto[]> {
+    return this.lessonsService.findBySection(sectionId, {
+      sub: request.user.sub,
+      role: request.user.role,
     });
-
-    return lessons.map(toLessonResponseDto);
   }
 }

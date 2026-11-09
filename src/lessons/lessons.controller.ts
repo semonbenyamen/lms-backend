@@ -30,7 +30,6 @@ import { LessonResponseDto } from './dto/lesson-response.dto.js';
 import { UpdateLessonDto } from './dto/update-lesson.dto.js';
 import { LessonOwnershipGuard } from './guards/lesson-ownership.guard.js';
 import { LessonsService } from './lessons.service.js';
-import { toLessonResponseDto } from './transformers/lesson-response.transformer.js';
 
 @ApiTags('Lessons')
 @Controller('lessons')
@@ -49,11 +48,11 @@ export class LessonsController {
   async findOne(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() request: AuthenticatedRequest,
-  ) {
-    const { sub, role } = request.user;
-    const lesson = await this.lessonsService.findById(id, { sub, role });
-
-    return toLessonResponseDto(lesson);
+  ): Promise<LessonResponseDto> {
+    return this.lessonsService.findById(id, {
+      sub: request.user.sub,
+      role: request.user.role,
+    });
   }
 
   @Patch(':id')

@@ -35,24 +35,14 @@ describe('LessonsController', () => {
     role: mockReq.user.role,
   };
 
-  const lesson = {
+  // The service returns a public DTO, not a database entity.
+  const lessonDto = {
     id: 'l-1',
     sectionId: 'section-1',
     title: 'Lesson 1',
     orderIndex: 1,
     createdAt: new Date('2026-11-01T10:00:00.000Z'),
     updatedAt: new Date('2026-11-02T10:00:00.000Z'),
-    deletedAt: null,
-    section: { id: 'section-1' },
-  };
-
-  const expectedLesson = {
-    id: lesson.id,
-    sectionId: lesson.sectionId,
-    title: lesson.title,
-    orderIndex: lesson.orderIndex,
-    createdAt: lesson.createdAt,
-    updatedAt: lesson.updatedAt,
   };
 
   beforeEach(async () => {
@@ -67,6 +57,7 @@ describe('LessonsController', () => {
         },
       ],
     })
+      // Mock guards to isolate controller behavior.
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
@@ -82,17 +73,23 @@ describe('LessonsController', () => {
   });
 
   it('should create a lesson without returning its data', async () => {
-    const dto = { title: 'Lesson 1', orderIndex: 1 };
-    mockLessonsService.create.mockResolvedValue(lesson);
+    const dto = {
+      title: 'Lesson 1',
+      orderIndex: 1,
+    };
+
+    mockLessonsService.create.mockResolvedValue(undefined);
 
     const result = await sectionLessonsController.create('section-1', dto);
 
     expect(mockLessonsService.create).toHaveBeenCalledWith('section-1', dto);
+
+    // POST should not expose the created lesson.
     expect(result).toBeUndefined();
   });
 
-  it('should find lesson by ID and return transformed data', async () => {
-    mockLessonsService.findById.mockResolvedValue(lesson);
+  it('should return the lesson DTO provided by the service', async () => {
+    mockLessonsService.findById.mockResolvedValue(lessonDto);
 
     const result = await controller.findOne('l-1', mockReq);
 
@@ -101,13 +98,27 @@ describe('LessonsController', () => {
       expectedUser,
     );
 
-    expect(result).toEqual(expectedLesson);
+    // The controller should return the DTO unchanged.
+    expect(result).toEqual(lessonDto);
+
+    // Database-only fields should not be exposed.
     expect(result).not.toHaveProperty('deletedAt');
     expect(result).not.toHaveProperty('section');
   });
 
-  it('should return all lessons without pagination and transform them', async () => {
-    mockLessonsService.findBySection.mockResolvedValue([lesson]);
+  it('should return all lesson DTOs without pagination', async () => {
+    const secondLessonDto = {
+      id: 'l-2',
+      sectionId: 'section-1',
+      title: 'Lesson 2',
+      orderIndex: 2,
+      createdAt: new Date('2026-11-01T10:00:00.000Z'),
+      updatedAt: new Date('2026-11-02T10:00:00.000Z'),
+    };
+
+    const lessonDtos = [lessonDto, secondLessonDto];
+
+    mockLessonsService.findBySection.mockResolvedValue(lessonDtos);
 
     const result = await sectionLessonsController.findBySection(
       'section-1',
@@ -119,22 +130,28 @@ describe('LessonsController', () => {
       expectedUser,
     );
 
-    expect(result).toEqual([expectedLesson]);
+    // The controller should return the complete DTO list unchanged.
+    expect(result).toEqual(lessonDtos);
+    expect(result).toHaveLength(2);
+
     expect(result[0]).not.toHaveProperty('deletedAt');
     expect(result[0]).not.toHaveProperty('section');
+    expect(result[1]).not.toHaveProperty('deletedAt');
+    expect(result[1]).not.toHaveProperty('section');
   });
 
   it('should update a lesson without returning its data', async () => {
-    mockLessonsService.update.mockResolvedValue({
-      ...lesson,
+    const dto = {
       title: 'Updated',
-    });
+    };
 
-    const result = await controller.update('l-1', { title: 'Updated' });
+    mockLessonsService.update.mockResolvedValue(undefined);
 
-    expect(mockLessonsService.update).toHaveBeenCalledWith('l-1', {
-      title: 'Updated',
-    });
+    const result = await controller.update('l-1', dto);
+
+    expect(mockLessonsService.update).toHaveBeenCalledWith('l-1', dto);
+
+    // PATCH should not expose the updated lesson.
     expect(result).toBeUndefined();
   });
 
