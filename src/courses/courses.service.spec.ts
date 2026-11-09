@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { IsNull } from 'typeorm';
+import { In, IsNull } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JwtPayload } from '../auth/types/authenticated-request.type.js';
@@ -9,6 +9,7 @@ import { CategoriesService } from '../categories/categories.service.js';
 import { CourseDifficulty } from '../common/enums/course-difficulty.enum.js';
 import { CourseLanguage } from '../common/enums/course-language.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
+import { Lesson } from '../lessons/entities/lesson.entity.js';
 import { Section } from '../sections/entities/section.entity.js';
 import { CoursesService } from './courses.service.js';
 import { Course } from './entities/course.entity.js';
@@ -33,6 +34,7 @@ describe('CoursesService', () => {
 
   // The delete runs its queries on the transaction manager.
   const transactionManager = {
+    find: vi.fn(),
     softDelete: vi.fn(),
     softRemove: vi.fn(),
   };
@@ -342,12 +344,17 @@ describe('CoursesService', () => {
       instructorId,
     };
 
-    it('should soft delete the course and its sections in one transaction', async () => {
+    it('should soft delete the course, its sections and their lessons in one transaction', async () => {
       mockCoursesRepo.findOne.mockResolvedValue({ ...course });
+      transactionManager.find.mockResolvedValue([{ id: 's-1' }, { id: 's-2' }]);
 
       await service.remove('course-1');
 
       expect(mockCoursesRepo.manager.transaction).toHaveBeenCalledTimes(1);
+      expect(transactionManager.softDelete).toHaveBeenCalledWith(Lesson, {
+        sectionId: In(['s-1', 's-2']),
+        deletedAt: IsNull(),
+      });
       expect(transactionManager.softDelete).toHaveBeenCalledWith(Section, {
         courseId: 'course-1',
         deletedAt: IsNull(),
@@ -358,6 +365,19 @@ describe('CoursesService', () => {
       );
       // Deletion preserves the database records.
       expect(mockCoursesRepo.remove).not.toHaveBeenCalled();
+    });
+
+    it('should skip the lessons when the course has no sections', async () => {
+      mockCoursesRepo.findOne.mockResolvedValue({ ...course });
+      transactionManager.find.mockResolvedValue([]);
+
+      await service.remove('course-1');
+
+      expect(transactionManager.softDelete).toHaveBeenCalledTimes(1);
+      expect(transactionManager.softDelete).toHaveBeenCalledWith(Section, {
+        courseId: 'course-1',
+        deletedAt: IsNull(),
+      });
     });
 
     it('should reject deletion when the course does not exist', async () => {

@@ -139,17 +139,6 @@ describe('LessonOwnershipGuard', () => {
         guard.canActivate(createContext(owner, { id: lessonId })),
       ).rejects.toThrow(NotFoundException);
     });
-
-    it('should throw NotFoundException when the course was soft deleted', async () => {
-      mockLessonsRepo.findOne.mockResolvedValue({
-        ...lesson,
-        section: { ...section, course: null },
-      });
-
-      await expect(
-        guard.canActivate(createContext(owner, { id: lessonId })),
-      ).rejects.toThrow(NotFoundException);
-    });
   });
 
   it('should deny when there is no user', async () => {

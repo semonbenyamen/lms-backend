@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 
 import type { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { canReadCourse } from '../common/authorization/authorization.util.js';
@@ -25,8 +25,6 @@ export class SectionsService {
   constructor(
     @InjectRepository(Section)
     private readonly sectionsRepository: Repository<Section>,
-    @InjectRepository(Lesson)
-    private readonly lessonsRepository: Repository<Lesson>,
     private readonly coursesService: CoursesService,
   ) {}
 
@@ -98,18 +96,11 @@ export class SectionsService {
   async remove(id: string): Promise<void> {
     const section = await this.findSectionWithCourse(id);
 
-    // Check for active lessons before deleting the section.
-    const lessonsCount = await this.lessonsRepository.count({
-      where: { sectionId: id },
+    // Soft delete the section and its lessons together, like a course delete.
+    await this.sectionsRepository.manager.transaction(async (manager) => {
+      await manager.softDelete(Lesson, { sectionId: id, deletedAt: IsNull() });
+      await manager.softRemove(Section, section);
     });
-
-    if (lessonsCount > 0) {
-      throw new ConflictException(
-        'Cannot delete a section that contains lessons',
-      );
-    }
-
-    await this.sectionsRepository.softRemove(section);
   }
 
   // order_index is unique per course, so a clash is a 409, not a 500.

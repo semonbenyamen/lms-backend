@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { CategoriesService } from '../categories/categories.service.js';
@@ -15,6 +15,7 @@ import {
 import { CourseResponseDto } from './dto/course-response.dto.js';
 import { CreateCourseDto } from './dto/create-course.dto.js';
 import { UpdateCourseDto } from './dto/update-course.dto.js';
+import { Lesson } from '../lessons/entities/lesson.entity.js';
 import { Section } from '../sections/entities/section.entity.js';
 import { Course } from './entities/course.entity.js';
 import { toCourseResponseDto } from './transformers/course-response.transformer.js';
@@ -108,9 +109,21 @@ export class CoursesService {
   async remove(id: string): Promise<void> {
     const course = await this.findCourseEntity(id);
 
-    // Soft delete the course and its sections together, so a section is
-    // never left without a course and its own checks only need the section.
+    // Soft delete the course with its sections and lessons together, so a
+    // child is never left without a parent and its checks only need itself.
     await this.coursesRepository.manager.transaction(async (manager) => {
+      const sections = await manager.find(Section, {
+        where: { courseId: id },
+        select: { id: true },
+      });
+
+      if (sections.length > 0) {
+        await manager.softDelete(Lesson, {
+          sectionId: In(sections.map((section) => section.id)),
+          deletedAt: IsNull(),
+        });
+      }
+
       await manager.softDelete(Section, { courseId: id, deletedAt: IsNull() });
       await manager.softRemove(Course, course);
     });

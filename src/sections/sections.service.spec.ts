@@ -1,7 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { QueryFailedError } from 'typeorm';
+import { IsNull, QueryFailedError } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JwtPayload } from '../auth/types/authenticated-request.type.js';
@@ -23,10 +23,15 @@ describe('SectionsService', () => {
     merge: vi.fn((section: Section, dto: Partial<Section>) =>
       Object.assign(section, dto),
     ),
+    manager: {
+      transaction: vi.fn(),
+    },
   };
 
-  const mockLessonsRepo = {
-    count: vi.fn(),
+  // The delete runs its queries on the transaction manager.
+  const transactionManager = {
+    softDelete: vi.fn(),
+    softRemove: vi.fn(),
   };
 
   const mockCoursesService = {
@@ -59,6 +64,10 @@ describe('SectionsService', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockSectionsRepo.manager.transaction.mockImplementation(
+      (work: (manager: typeof transactionManager) => Promise<void>) =>
+        work(transactionManager),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -66,10 +75,6 @@ describe('SectionsService', () => {
         {
           provide: getRepositoryToken(Section),
           useValue: mockSectionsRepo,
-        },
-        {
-          provide: getRepositoryToken(Lesson),
-          useValue: mockLessonsRepo,
         },
         {
           provide: CoursesService,
@@ -385,35 +390,27 @@ describe('SectionsService', () => {
       },
     };
 
-    it('should remove a section without lessons', async () => {
+    it('should soft delete the section and its lessons in one transaction', async () => {
       mockSectionsRepo.findOne.mockResolvedValue(section);
-      mockLessonsRepo.count.mockResolvedValue(0);
-      mockSectionsRepo.softRemove.mockResolvedValue(undefined);
 
       await expect(service.remove('s-1')).resolves.toBeUndefined();
 
-      // Verify that the service checks for active lessons.
-      expect(mockLessonsRepo.count).toHaveBeenCalledWith({
-        where: { sectionId: 's-1' },
+      expect(mockSectionsRepo.manager.transaction).toHaveBeenCalledTimes(1);
+      expect(transactionManager.softDelete).toHaveBeenCalledWith(Lesson, {
+        sectionId: 's-1',
+        deletedAt: IsNull(),
       });
-
-      // Allow deletion when no active lessons exist.
-      expect(mockSectionsRepo.softRemove).toHaveBeenCalledWith(section);
+      expect(transactionManager.softRemove).toHaveBeenCalledWith(
+        Section,
+        section,
+      );
     });
 
-    it('should throw ConflictException if section contains lessons', async () => {
-      mockSectionsRepo.findOne.mockResolvedValue(section);
-      mockLessonsRepo.count.mockResolvedValue(2);
+    it('should throw NotFoundException when the section does not exist', async () => {
+      mockSectionsRepo.findOne.mockResolvedValue(null);
 
-      // Prevent deleting a section with active lessons.
-      await expect(service.remove('s-1')).rejects.toThrow(ConflictException);
-
-      expect(mockLessonsRepo.count).toHaveBeenCalledWith({
-        where: { sectionId: 's-1' },
-      });
-
-      // The section must not be deleted.
-      expect(mockSectionsRepo.softRemove).not.toHaveBeenCalled();
+      await expect(service.remove('s-1')).rejects.toThrow(NotFoundException);
+      expect(mockSectionsRepo.manager.transaction).not.toHaveBeenCalled();
     });
   });
 });
