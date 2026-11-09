@@ -21,17 +21,19 @@ export class HttpExceptionFilter implements ExceptionFilter {
       ? exception.getStatus()
       : HttpStatus.INTERNAL_SERVER_ERROR;
 
+    // An unexpected error's own message may describe internals, so the
+    // client gets a generic one and the details go to the log.
     const message = isHttpException
       ? exception.getResponse()
-      : exception instanceof Error
-        ? exception.message
-        : String(exception);
+      : 'Internal server error';
 
-    // Print error details in the server terminal
-    this.logger.error(
-      `[HTTP ${statusCode}] ${typeof message === 'string' ? message : JSON.stringify(message)}`,
-      exception instanceof Error ? exception.stack : undefined,
-    );
+    // 4xx errors are expected client mistakes, so only server errors are logged.
+    if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      this.logger.error(
+        exception instanceof Error ? exception.message : String(exception),
+        exception instanceof Error ? exception.stack : undefined,
+      );
+    }
 
     const isDevelopment = process.env.NODE_ENV !== 'production';
 

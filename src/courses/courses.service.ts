@@ -1,9 +1,19 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomUUID } from 'node:crypto';
 import { IsNull, Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { CategoriesService } from '../categories/categories.service.js';
+import { assertValidAsset } from '../common/cloudinary/assert-valid-asset.js';
+import { CloudinaryService } from '../common/cloudinary/cloudinary.service.js';
+import { UploadSignatureResponseDto } from '../common/cloudinary/dto/upload-signature-response.dto.js';
+import { CloudinaryResourceType } from '../common/enums/cloudinary-resource-type.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { IdResponseDto } from '../common/dto/id-response.dto.js';
 import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
@@ -20,12 +30,19 @@ import { Section } from '../sections/entities/section.entity.js';
 import { Course } from './entities/course.entity.js';
 import { toCourseResponseDto } from './transformers/course-response.transformer.js';
 
+// Every thumbnail uploaded for a course starts with this prefix.
+export const courseThumbnailPrefix = (courseId: string): string =>
+  `lms/courses/${courseId}/thumbnail/`;
+
 @Injectable()
 export class CoursesService {
+  private readonly logger = new Logger(CoursesService.name);
+
   constructor(
     @InjectRepository(Course)
     private readonly coursesRepository: Repository<Course>,
     private readonly categoriesService: CategoriesService,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   async create(
@@ -92,17 +109,39 @@ export class CoursesService {
   }
 
   // Ownership is verified by CourseOwnershipGuard before this runs.
+  // The course id in the public id ties the uploaded image to this course.
+  createThumbnailSignature(id: string): UploadSignatureResponseDto {
+    return this.cloudinaryService.createUploadSignature(
+      `${courseThumbnailPrefix(id)}${randomUUID()}`,
+      CloudinaryResourceType.IMAGE,
+    );
+  }
+
+  // Ownership is verified by CourseOwnershipGuard before this runs.
   async update(id: string, updateCourseDto: UpdateCourseDto): Promise<void> {
     const course = await this.findCourseEntity(id);
+    const oldThumbnailPublicId = course.thumbnailPublicId;
+    const { thumbnailPublicId, ...changes } = updateCourseDto;
 
-    if (updateCourseDto.categoryId) {
-      await this.categoriesService.assertExists(updateCourseDto.categoryId);
+    if (changes.categoryId) {
+      await this.categoriesService.assertExists(changes.categoryId);
     }
 
     // Apply only the fields provided in the update request.
-    await this.coursesRepository.save(
-      this.coursesRepository.merge(course, updateCourseDto),
-    );
+    this.coursesRepository.merge(course, changes);
+
+    if (thumbnailPublicId !== undefined) {
+      await this.applyThumbnail(course, thumbnailPublicId);
+    }
+
+    await this.coursesRepository.save(course);
+
+    if (
+      oldThumbnailPublicId &&
+      oldThumbnailPublicId !== course.thumbnailPublicId
+    ) {
+      await this.deleteReplacedThumbnail(oldThumbnailPublicId);
+    }
   }
 
   // Ownership is verified by CourseOwnershipGuard before this runs.
@@ -127,6 +166,51 @@ export class CoursesService {
   }
 
   // --- Helper Methods ---
+
+  // null removes the thumbnail; a public id is checked before it is used.
+  private async applyThumbnail(
+    course: Course,
+    thumbnailPublicId: string | null,
+  ): Promise<void> {
+    if (thumbnailPublicId === null) {
+      course.thumbnailUrl = null;
+      course.thumbnailPublicId = null;
+      return;
+    }
+
+    // The prefix proves the image was signed for this course.
+    if (!thumbnailPublicId.startsWith(courseThumbnailPrefix(course.id))) {
+      throw new BadRequestException(
+        'The uploaded image does not belong to this course',
+      );
+    }
+
+    const asset = await this.cloudinaryService.getAssetDetails(
+      thumbnailPublicId,
+      CloudinaryResourceType.IMAGE,
+    );
+
+    assertValidAsset(asset, CloudinaryResourceType.IMAGE);
+
+    course.thumbnailUrl = asset.secureUrl;
+    course.thumbnailPublicId = thumbnailPublicId;
+  }
+
+  // The new data is already saved, so a failed cleanup only leaves an
+  // unused image on Cloudinary and must not fail the request.
+  private async deleteReplacedThumbnail(publicId: string): Promise<void> {
+    try {
+      await this.cloudinaryService.deleteFile(
+        publicId,
+        CloudinaryResourceType.IMAGE,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to delete the replaced thumbnail ${publicId} from Cloudinary`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
 
   // Categories are paginated, so a course brings the name it needs with it.
   private courseWithCategoryQuery() {
