@@ -1,4 +1,3 @@
-
 import {
   BadRequestException,
   CanActivate,
@@ -21,12 +20,10 @@ export class SectionOwnershipGuard implements CanActivate {
     @InjectRepository(Section)
     private readonly sectionsRepository: Repository<Section>,
     private readonly coursesService: CoursesService,
-  ) { }
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context
-      .switchToHttp()
-      .getRequest<AuthenticatedRequest>();
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
 
     const user = request.user;
     const courseId = request.params?.courseId;
@@ -57,7 +54,8 @@ export class SectionOwnershipGuard implements CanActivate {
         relations: { course: true },
       });
 
-      if (!section || !section.course) {
+      // Deleting a course soft deletes its sections, so a found section has a course.
+      if (!section) {
         throw new NotFoundException('Section not found');
       }
 

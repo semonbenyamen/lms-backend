@@ -1,4 +1,3 @@
-
 import {
   ExecutionContext,
   ForbiddenException,
@@ -69,9 +68,7 @@ describe('SectionOwnershipGuard', () => {
       ],
     }).compile();
 
-    guard = module.get<SectionOwnershipGuard>(
-      SectionOwnershipGuard,
-    );
+    guard = module.get<SectionOwnershipGuard>(SectionOwnershipGuard);
   });
 
   describe('Create section', () => {

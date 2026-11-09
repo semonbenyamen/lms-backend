@@ -1,4 +1,3 @@
-
 import {
   ConflictException,
   Injectable,
@@ -25,7 +24,6 @@ export class SectionsService {
   constructor(
     @InjectRepository(Section)
     private readonly sectionsRepository: Repository<Section>,
-
     private readonly coursesService: CoursesService,
   ) {}
 
@@ -42,7 +40,7 @@ export class SectionsService {
     await this.saveSection(section);
   }
 
-  async findById(
+  async getSection(
     id: string,
     user: SectionActor,
   ): Promise<SectionResponseDto> {
@@ -53,8 +51,8 @@ export class SectionsService {
       },
     });
 
-    // The course is empty when it was soft deleted.
-    if (!section || !section.course || !canReadCourse(section.course, user)) {
+    // Deleting a course soft deletes its sections, so a found section has a course.
+    if (!section || !canReadCourse(section.course, user)) {
       throw new NotFoundException(`Section with ID ${id} not found`);
     }
 
@@ -123,8 +121,8 @@ export class SectionsService {
       },
     });
 
-    // The course is empty when it was soft deleted, because the join skips deleted rows.
-    if (!section || !section.course) {
+    // Deleting a course soft deletes its sections, so no course check is needed.
+    if (!section) {
       throw new NotFoundException(`Section with ID ${id} not found`);
     }
 
