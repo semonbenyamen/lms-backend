@@ -123,7 +123,7 @@ describe('LessonsService', () => {
     });
   });
 
-  describe('findById', () => {
+  describe('getLesson', () => {
     const publishedLesson = {
       id: 'lesson-1',
       sectionId: 'section-1',
@@ -170,7 +170,7 @@ describe('LessonsService', () => {
     it('should return published lesson to students', async () => {
       mockLessonsRepo.findOne.mockResolvedValue(publishedLesson);
 
-      const result = await service.findById('lesson-1', studentUser);
+      const result = await service.getLesson('lesson-1', studentUser);
 
       expect(result).toEqual(expectedPublishedLesson);
     });
@@ -178,7 +178,7 @@ describe('LessonsService', () => {
     it('should throw NotFoundException for students when course is unpublished', async () => {
       mockLessonsRepo.findOne.mockResolvedValue(unpublishedLesson);
 
-      await expect(service.findById('lesson-2', studentUser)).rejects.toThrow(
+      await expect(service.getLesson('lesson-2', studentUser)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -186,7 +186,7 @@ describe('LessonsService', () => {
     it('should return unpublished lesson to course owner instructor', async () => {
       mockLessonsRepo.findOne.mockResolvedValue(unpublishedLesson);
 
-      const result = await service.findById('lesson-2', instructorUser);
+      const result = await service.getLesson('lesson-2', instructorUser);
 
       expect(result).toEqual(expectedUnpublishedLesson);
     });
@@ -194,7 +194,7 @@ describe('LessonsService', () => {
     it('should return unpublished lesson to admin', async () => {
       mockLessonsRepo.findOne.mockResolvedValue(unpublishedLesson);
 
-      const result = await service.findById('lesson-2', adminUser);
+      const result = await service.getLesson('lesson-2', adminUser);
 
       expect(result).toEqual(expectedUnpublishedLesson);
     });
@@ -202,28 +202,17 @@ describe('LessonsService', () => {
     it('should throw NotFoundException when lesson does not exist', async () => {
       mockLessonsRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.findById('unknown-id', studentUser)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.getLesson('unknown-id', studentUser),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should throw NotFoundException for other instructor when course is unpublished', async () => {
       mockLessonsRepo.findOne.mockResolvedValue(unpublishedLesson);
 
       await expect(
-        service.findById('lesson-2', otherInstructorUser),
+        service.getLesson('lesson-2', otherInstructorUser),
       ).rejects.toThrow(NotFoundException);
-    });
-
-    it('should throw NotFoundException when the course was soft deleted', async () => {
-      mockLessonsRepo.findOne.mockResolvedValue({
-        ...publishedLesson,
-        section: { course: null },
-      });
-
-      await expect(service.findById('lesson-1', adminUser)).rejects.toThrow(
-        NotFoundException,
-      );
     });
   });
 

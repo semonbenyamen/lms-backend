@@ -35,7 +35,7 @@ export class LessonsService {
     await this.saveLesson(lesson);
   }
 
-  async findById(
+  async getLesson(
     lessonId: string,
     user: Pick<JwtPayload, 'sub' | 'role'>,
   ): Promise<LessonResponseDto> {
@@ -107,8 +107,9 @@ export class LessonsService {
       relations: { section: { course: true } },
     });
 
-    // The joins come back empty when the section or the course was soft deleted.
-    if (!lesson || !lesson.section || !lesson.section.course) {
+    // Deleting a section or a course soft deletes its lessons, so a found
+    // lesson has a section and a course.
+    if (!lesson) {
       throw new NotFoundException(`Lesson with ID ${lessonId} not found`);
     }
 

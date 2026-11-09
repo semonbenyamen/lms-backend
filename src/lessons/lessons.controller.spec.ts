@@ -16,7 +16,7 @@ describe('LessonsController', () => {
 
   const mockLessonsService = {
     create: vi.fn(),
-    findById: vi.fn(),
+    getLesson: vi.fn(),
     findBySection: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
@@ -89,11 +89,11 @@ describe('LessonsController', () => {
   });
 
   it('should return the lesson DTO provided by the service', async () => {
-    mockLessonsService.findById.mockResolvedValue(lessonDto);
+    mockLessonsService.getLesson.mockResolvedValue(lessonDto);
 
     const result = await controller.findOne('l-1', mockReq);
 
-    expect(mockLessonsService.findById).toHaveBeenCalledWith(
+    expect(mockLessonsService.getLesson).toHaveBeenCalledWith(
       'l-1',
       expectedUser,
     );
