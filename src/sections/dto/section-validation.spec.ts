@@ -1,4 +1,3 @@
-
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 
@@ -19,22 +18,22 @@ describe('Section DTO Validation', () => {
 
   it('should reject null title', async () => {
     // Null must be rejected before reaching the database.
-    await expect(
-      validateUpdate({ title: null }),
-    ).rejects.toThrow(BadRequestException);
+    await expect(validateUpdate({ title: null })).rejects.toThrow(
+      BadRequestException,
+    );
   });
 
   it('should reject null orderIndex', async () => {
-    await expect(
-      validateUpdate({ orderIndex: null }),
-    ).rejects.toThrow(BadRequestException);
+    await expect(validateUpdate({ orderIndex: null })).rejects.toThrow(
+      BadRequestException,
+    );
   });
 
   it('should accept orderIndex 0', async () => {
     // Zero is a valid section position.
-    await expect(
-      validateUpdate({ orderIndex: 0 }),
-    ).resolves.toMatchObject({ orderIndex: 0 });
+    await expect(validateUpdate({ orderIndex: 0 })).resolves.toMatchObject({
+      orderIndex: 0,
+    });
   });
 
   it('should allow partial updates', async () => {

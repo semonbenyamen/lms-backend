@@ -1,10 +1,7 @@
-
 import { SectionResponseDto } from '../dto/section-response.dto.js';
 import { Section } from '../entities/section.entity.js';
 
-export function toSectionResponseDto(
-  section: Section,
-): SectionResponseDto {
+export function toSectionResponseDto(section: Section): SectionResponseDto {
   // Return only the fields defined in the public response DTO.
   return {
     id: section.id,

@@ -1,4 +1,3 @@
-
 import { describe, expect, it } from 'vitest';
 
 import { Section } from '../entities/section.entity.js';
