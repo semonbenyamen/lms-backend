@@ -17,8 +17,8 @@ import { ContentType } from '../../common/enums/content-type.enum.js';
 // A link must be a full http or https address.
 const URL_OPTIONS = { protocols: ['http', 'https'], require_protocol: true };
 
-// Longer videos are split into more content items.
-export const MAX_VIDEO_DURATION_SECONDS = 30 * 60;
+// Only stops absurd values, real videos are far shorter.
+export const MAX_VIDEO_DURATION_SECONDS = 12 * 60 * 60;
 
 // The lesson comes from the route, so it is not part of the body.
 export class CreateContentItemDto {
