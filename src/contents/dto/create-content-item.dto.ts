@@ -6,11 +6,19 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUrl,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
 
 import { ContentType } from '../../common/enums/content-type.enum.js';
+
+// A link must be a full http or https address.
+const URL_OPTIONS = { protocols: ['http', 'https'], require_protocol: true };
+
+// Longer videos are split into more content items.
+export const MAX_VIDEO_DURATION_SECONDS = 30 * 60;
 
 // The lesson comes from the route, so it is not part of the body.
 export class CreateContentItemDto {
@@ -51,7 +59,7 @@ export class CreateContentItemDto {
     maxLength: 2048,
   })
   @IsOptional()
-  @IsString()
+  @IsUrl(URL_OPTIONS)
   @MaxLength(2048)
   videoUrl?: string;
 
@@ -61,7 +69,7 @@ export class CreateContentItemDto {
     maxLength: 2048,
   })
   @IsOptional()
-  @IsString()
+  @IsUrl(URL_OPTIONS)
   @MaxLength(2048)
   imageUrl?: string;
 
@@ -70,11 +78,13 @@ export class CreateContentItemDto {
     description:
       'Duration of the video in seconds, kept for video content only',
     minimum: 0,
+    maximum: MAX_VIDEO_DURATION_SECONDS,
   })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
+  @Max(MAX_VIDEO_DURATION_SECONDS)
   durationSeconds?: number;
 
   @ApiProperty({

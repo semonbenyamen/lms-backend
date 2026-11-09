@@ -9,7 +9,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { UserRole } from '../../common/enums/user-role.enum.js';
-import { Lesson } from '../../lessons/entities/lesson.entity.js';
+import { LessonsService } from '../../lessons/lessons.service.js';
 import { ContentItem } from '../entities/content-item.entity.js';
 import { ContentOwnershipGuard } from './content-ownership.guard.js';
 
@@ -19,7 +19,7 @@ describe('ContentOwnershipGuard', () => {
   const lessonId = '550e8400-e29b-41d4-a716-446655440003';
   const contentItemId = '550e8400-e29b-41d4-a716-446655440004';
 
-  const mockLessonsRepo = { findOne: vi.fn() };
+  const mockLessonsService = { findLessonWithCourse: vi.fn() };
   const mockContentItemsRepo = { findOne: vi.fn() };
 
   const owner = { sub: 'instructor-1', role: UserRole.INSTRUCTOR };
@@ -44,7 +44,7 @@ describe('ContentOwnershipGuard', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ContentOwnershipGuard,
-        { provide: getRepositoryToken(Lesson), useValue: mockLessonsRepo },
+        { provide: LessonsService, useValue: mockLessonsService },
         {
           provide: getRepositoryToken(ContentItem),
           useValue: mockContentItemsRepo,
@@ -57,7 +57,9 @@ describe('ContentOwnershipGuard', () => {
 
   describe('Create content', () => {
     it('should allow the course owner and admins', async () => {
-      mockLessonsRepo.findOne.mockResolvedValue({ section: { course } });
+      mockLessonsService.findLessonWithCourse.mockResolvedValue({
+        section: { course },
+      });
 
       await expect(
         guard.canActivate(createContext(owner, { lessonId })),
@@ -68,7 +70,9 @@ describe('ContentOwnershipGuard', () => {
     });
 
     it('should forbid another instructor', async () => {
-      mockLessonsRepo.findOne.mockResolvedValue({ section: { course } });
+      mockLessonsService.findLessonWithCourse.mockResolvedValue({
+        section: { course },
+      });
 
       await expect(
         guard.canActivate(createContext(otherInstructor, { lessonId })),
@@ -76,7 +80,9 @@ describe('ContentOwnershipGuard', () => {
     });
 
     it('should throw NotFoundException when the lesson does not exist', async () => {
-      mockLessonsRepo.findOne.mockResolvedValue(null);
+      mockLessonsService.findLessonWithCourse.mockRejectedValue(
+        new NotFoundException(),
+      );
 
       await expect(
         guard.canActivate(createContext(owner, { lessonId })),
@@ -87,14 +93,15 @@ describe('ContentOwnershipGuard', () => {
       await expect(
         guard.canActivate(createContext(owner, { lessonId: 'not-a-uuid' })),
       ).rejects.toThrow(BadRequestException);
-      expect(mockLessonsRepo.findOne).not.toHaveBeenCalled();
+      expect(mockLessonsService.findLessonWithCourse).not.toHaveBeenCalled();
     });
   });
 
   describe('Update or delete content', () => {
     it('should allow the course owner', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue({
-        lesson: { section: { course } },
+      mockContentItemsRepo.findOne.mockResolvedValue({ lessonId });
+      mockLessonsService.findLessonWithCourse.mockResolvedValue({
+        section: { course },
       });
 
       await expect(
@@ -103,8 +110,9 @@ describe('ContentOwnershipGuard', () => {
     });
 
     it('should forbid another instructor', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue({
-        lesson: { section: { course } },
+      mockContentItemsRepo.findOne.mockResolvedValue({ lessonId });
+      mockLessonsService.findLessonWithCourse.mockResolvedValue({
+        section: { course },
       });
 
       await expect(

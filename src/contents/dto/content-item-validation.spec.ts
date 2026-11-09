@@ -2,6 +2,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { describe, expect, it } from 'vitest';
 
+import { MAX_VIDEO_DURATION_SECONDS } from './create-content-item.dto.js';
 import { UpdateContentItemDto } from './update-content-item.dto.js';
 
 const invalidFields = async (body: object): Promise<string[]> => {
@@ -26,5 +27,32 @@ describe('UpdateContentItemDto', () => {
 
   it('should allow clearing optional fields with null', async () => {
     expect(await invalidFields({ durationSeconds: null })).toEqual([]);
+  });
+
+  it('should accept full http and https links', async () => {
+    expect(
+      await invalidFields({
+        videoUrl: 'https://cdn.example.com/v.mp4',
+        imageUrl: 'http://cdn.example.com/i.png',
+      }),
+    ).toEqual([]);
+  });
+
+  it('should reject links without a protocol or with another protocol', async () => {
+    expect(
+      await invalidFields({
+        videoUrl: 'cdn.example.com/v.mp4',
+        imageUrl: 'ftp://cdn.example.com/i.png',
+      }),
+    ).toEqual(['videoUrl', 'imageUrl']);
+  });
+
+  it('should reject a duration above the maximum', async () => {
+    expect(
+      await invalidFields({ durationSeconds: MAX_VIDEO_DURATION_SECONDS }),
+    ).toEqual([]);
+    expect(
+      await invalidFields({ durationSeconds: MAX_VIDEO_DURATION_SECONDS + 1 }),
+    ).toEqual(['durationSeconds']);
   });
 });

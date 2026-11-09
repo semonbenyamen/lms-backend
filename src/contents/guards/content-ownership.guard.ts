@@ -11,16 +11,15 @@ import { Repository } from 'typeorm';
 
 import type { AuthenticatedRequest } from '../../auth/types/authenticated-request.type.js';
 import { assertOwnershipOrAdmin } from '../../common/authorization/authorization.util.js';
-import { Lesson } from '../../lessons/entities/lesson.entity.js';
+import { LessonsService } from '../../lessons/lessons.service.js';
 import { ContentItem } from '../entities/content-item.entity.js';
 
 @Injectable()
 export class ContentOwnershipGuard implements CanActivate {
   constructor(
-    @InjectRepository(Lesson)
-    private readonly lessonsRepository: Repository<Lesson>,
     @InjectRepository(ContentItem)
     private readonly contentItemsRepository: Repository<ContentItem>,
+    private readonly lessonsService: LessonsService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -56,16 +55,7 @@ export class ContentOwnershipGuard implements CanActivate {
       throw new BadRequestException('Invalid lesson ID');
     }
 
-    const lesson = await this.lessonsRepository.findOne({
-      where: { id: lessonId },
-      relations: { section: { course: true } },
-    });
-
-    // Deleting a section or course soft deletes its lessons, so a found lesson
-    // has a section and a course.
-    if (!lesson) {
-      throw new NotFoundException(`Lesson with ID ${lessonId} not found`);
-    }
+    const lesson = await this.lessonsService.findLessonWithCourse(lessonId);
 
     return lesson.section.course.instructorId;
   }
@@ -78,15 +68,16 @@ export class ContentOwnershipGuard implements CanActivate {
 
     const contentItem = await this.contentItemsRepository.findOne({
       where: { id },
-      relations: { lesson: { section: { course: true } } },
     });
 
-    // Deleting a lesson, section or course soft deletes its content items, so a
-    // found item has a lesson, a section and a course.
     if (!contentItem) {
       throw new NotFoundException(`Content item with ID ${id} not found`);
     }
 
-    return contentItem.lesson.section.course.instructorId;
+    const lesson = await this.lessonsService.findLessonWithCourse(
+      contentItem.lessonId,
+    );
+
+    return lesson.section.course.instructorId;
   }
 }

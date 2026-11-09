@@ -111,7 +111,8 @@ export class LessonsService {
     }
   }
 
-  private async findLessonWithCourse(lessonId: string): Promise<Lesson> {
+  // Used by ContentsService and ContentOwnershipGuard to reach the course.
+  async findLessonWithCourse(lessonId: string): Promise<Lesson> {
     const lesson = await this.lessonsRepository.findOne({
       where: { id: lessonId },
       relations: { section: { course: true } },

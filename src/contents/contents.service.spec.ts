@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { ContentType } from '../common/enums/content-type.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
-import { Lesson } from '../lessons/entities/lesson.entity.js';
+import { LessonsService } from '../lessons/lessons.service.js';
 import { ContentsService } from './contents.service.js';
 import { ContentItem } from './entities/content-item.entity.js';
 
@@ -29,8 +29,8 @@ describe('ContentsService', () => {
     softRemove: vi.fn(),
   };
 
-  const mockLessonsRepo = {
-    findOne: vi.fn(),
+  const mockLessonsService = {
+    findLessonWithCourse: vi.fn(),
   };
 
   const instructorUser: JwtPayload = {
@@ -68,8 +68,8 @@ describe('ContentsService', () => {
           useValue: mockContentItemsRepo,
         },
         {
-          provide: getRepositoryToken(Lesson),
-          useValue: mockLessonsRepo,
+          provide: LessonsService,
+          useValue: mockLessonsService,
         },
       ],
     }).compile();
@@ -148,62 +148,65 @@ describe('ContentsService', () => {
   );
 
   describe('getContent', () => {
-    const publishedContent = {
-      id: 'ci-1',
-      title: 'Published Content',
-      lesson: {
-        section: {
-          course: { instructorId: instructorUser.sub, isPublished: true },
-        },
+    const publishedLesson = {
+      section: {
+        course: { instructorId: instructorUser.sub, isPublished: true },
       },
     };
 
-    const draftContent = {
-      id: 'ci-2',
-      title: 'Draft Content',
-      lesson: {
-        section: {
-          course: { instructorId: instructorUser.sub, isPublished: false },
-        },
+    const draftLesson = {
+      section: {
+        course: { instructorId: instructorUser.sub, isPublished: false },
       },
     };
+
+    const content = { id: 'ci-1', lessonId: 'l-1', title: 'Content' };
 
     it('should return published content to student', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue(publishedContent);
+      mockContentItemsRepo.findOne.mockResolvedValue(content);
+      mockLessonsService.findLessonWithCourse.mockResolvedValue(
+        publishedLesson,
+      );
 
       const result = await service.getContent('ci-1', studentUser);
 
-      // The response keeps the public fields and drops the relations.
-      expect(result).toEqual({ id: 'ci-1', title: 'Published Content' });
-      expect(result).not.toHaveProperty('lesson');
+      // The content is loaded alone and its course comes from LessonsService.
+      expect(mockContentItemsRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 'ci-1' },
+      });
+      expect(mockLessonsService.findLessonWithCourse).toHaveBeenCalledWith(
+        'l-1',
+      );
+      expect(result).toEqual(content);
     });
 
     it('should throw NotFoundException to student for draft content', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue(draftContent);
+      mockContentItemsRepo.findOne.mockResolvedValue(content);
+      mockLessonsService.findLessonWithCourse.mockResolvedValue(draftLesson);
 
-      await expect(service.getContent('ci-2', studentUser)).rejects.toThrow(
+      await expect(service.getContent('ci-1', studentUser)).rejects.toThrow(
         NotFoundException,
       );
     });
 
     it('should throw NotFoundException to another instructor for draft content', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue(draftContent);
+      mockContentItemsRepo.findOne.mockResolvedValue(content);
+      mockLessonsService.findLessonWithCourse.mockResolvedValue(draftLesson);
 
       await expect(
-        service.getContent('ci-2', otherInstructorUser),
+        service.getContent('ci-1', otherInstructorUser),
       ).rejects.toThrow(NotFoundException);
     });
 
     it('should return draft content to the owner and to admins', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue(draftContent);
+      mockContentItemsRepo.findOne.mockResolvedValue(content);
+      mockLessonsService.findLessonWithCourse.mockResolvedValue(draftLesson);
 
-      const expected = { id: 'ci-2', title: 'Draft Content' };
-
-      await expect(service.getContent('ci-2', instructorUser)).resolves.toEqual(
-        expected,
+      await expect(service.getContent('ci-1', instructorUser)).resolves.toEqual(
+        content,
       );
-      await expect(service.getContent('ci-2', adminUser)).resolves.toEqual(
-        expected,
+      await expect(service.getContent('ci-1', adminUser)).resolves.toEqual(
+        content,
       );
     });
 
@@ -213,6 +216,7 @@ describe('ContentsService', () => {
       await expect(service.getContent('ci-1', adminUser)).rejects.toThrow(
         NotFoundException,
       );
+      expect(mockLessonsService.findLessonWithCourse).not.toHaveBeenCalled();
     });
   });
 
@@ -225,7 +229,7 @@ describe('ContentsService', () => {
     };
 
     it('should list the content of a draft lesson for its owner', async () => {
-      mockLessonsRepo.findOne.mockResolvedValue(lesson);
+      mockLessonsService.findLessonWithCourse.mockResolvedValue(lesson);
       mockContentItemsRepo.find.mockResolvedValue([{ id: 'ci-1' }]);
 
       const result = await service.findByLesson('l-1', instructorUser);
@@ -239,7 +243,7 @@ describe('ContentsService', () => {
     });
 
     it('should throw NotFoundException to student for a draft lesson', async () => {
-      mockLessonsRepo.findOne.mockResolvedValue(lesson);
+      mockLessonsService.findLessonWithCourse.mockResolvedValue(lesson);
 
       await expect(service.findByLesson('l-1', studentUser)).rejects.toThrow(
         NotFoundException,
@@ -248,7 +252,9 @@ describe('ContentsService', () => {
     });
 
     it('should throw NotFoundException when the lesson does not exist', async () => {
-      mockLessonsRepo.findOne.mockResolvedValue(null);
+      mockLessonsService.findLessonWithCourse.mockRejectedValue(
+        new NotFoundException(),
+      );
 
       await expect(
         service.findByLesson('missing', instructorUser),

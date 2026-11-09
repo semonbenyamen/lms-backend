@@ -11,7 +11,7 @@ import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { canReadCourse } from '../common/authorization/authorization.util.js';
 import { isUniqueViolation } from '../common/database/is-unique-violation.js';
 import { ContentType } from '../common/enums/content-type.enum.js';
-import { Lesson } from '../lessons/entities/lesson.entity.js';
+import { LessonsService } from '../lessons/lessons.service.js';
 import {
   getTypeFieldError,
   pickTypeFields,
@@ -28,8 +28,7 @@ export class ContentsService {
   constructor(
     @InjectRepository(ContentItem)
     private readonly contentItemsRepository: Repository<ContentItem>,
-    @InjectRepository(Lesson)
-    private readonly lessonsRepository: Repository<Lesson>,
+    private readonly lessonsService: LessonsService,
   ) {}
 
   // Ownership of the lesson is verified by ContentOwnershipGuard before this runs.
@@ -49,18 +48,13 @@ export class ContentsService {
     id: string,
     user: Pick<JwtPayload, 'sub' | 'role'>,
   ): Promise<ContentItemResponseDto> {
-    const contentItem = await this.contentItemsRepository.findOne({
-      where: { id },
-      relations: { lesson: { section: { course: true } } },
-    });
+    const contentItem = await this.findContentItemEntity(id);
+    const lesson = await this.lessonsService.findLessonWithCourse(
+      contentItem.lessonId,
+    );
 
-    // Deleting a lesson, section or course soft deletes its content items, so
-    // a found item has a course. A draft course's content looks missing to
-    // users who cannot read it.
-    if (
-      !contentItem ||
-      !canReadCourse(contentItem.lesson.section.course, user)
-    ) {
+    // A draft course's content looks missing to users who cannot read it.
+    if (!canReadCourse(lesson.section.course, user)) {
       throw new NotFoundException(`Content item with ID ${id} not found`);
     }
 
@@ -71,14 +65,9 @@ export class ContentsService {
     lessonId: string,
     user: Pick<JwtPayload, 'sub' | 'role'>,
   ): Promise<ContentItemResponseDto[]> {
-    const lesson = await this.lessonsRepository.findOne({
-      where: { id: lessonId },
-      relations: { section: { course: true } },
-    });
+    const lesson = await this.lessonsService.findLessonWithCourse(lessonId);
 
-    // Deleting a section or course soft deletes its lessons, so a found lesson
-    // has a course.
-    if (!lesson || !canReadCourse(lesson.section.course, user)) {
+    if (!canReadCourse(lesson.section.course, user)) {
       throw new NotFoundException(`Lesson with ID ${lessonId} not found`);
     }
 
