@@ -1,4 +1,3 @@
-
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -152,7 +151,7 @@ describe('SectionsService', () => {
     });
   });
 
-  describe('findById', () => {
+  describe('getSection', () => {
     const createdAt = new Date('2026-01-01T00:00:00.000Z');
     const updatedAt = new Date('2026-01-02T00:00:00.000Z');
 
@@ -201,7 +200,7 @@ describe('SectionsService', () => {
     it('should return published section to student', async () => {
       mockSectionsRepo.findOne.mockResolvedValue(publishedSection);
 
-      const result = await service.findById('s-1', studentUser);
+      const result = await service.getSection('s-1', studentUser);
 
       expect(result).toEqual(expectedPublishedSection);
     });
@@ -209,7 +208,7 @@ describe('SectionsService', () => {
     it('should throw NotFoundException to student for draft section', async () => {
       mockSectionsRepo.findOne.mockResolvedValue(draftSection);
 
-      await expect(service.findById('s-2', studentUser)).rejects.toThrow(
+      await expect(service.getSection('s-2', studentUser)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -217,7 +216,7 @@ describe('SectionsService', () => {
     it('should return draft section to owner instructor', async () => {
       mockSectionsRepo.findOne.mockResolvedValue(draftSection);
 
-      const result = await service.findById('s-2', instructorUser);
+      const result = await service.getSection('s-2', instructorUser);
 
       expect(result).toEqual(expectedDraftSection);
     });
@@ -225,7 +224,7 @@ describe('SectionsService', () => {
     it('should return draft section to admin', async () => {
       mockSectionsRepo.findOne.mockResolvedValue(draftSection);
 
-      const result = await service.findById('s-2', adminUser);
+      const result = await service.getSection('s-2', adminUser);
 
       expect(result).toEqual(expectedDraftSection);
     });
@@ -234,17 +233,15 @@ describe('SectionsService', () => {
       mockSectionsRepo.findOne.mockResolvedValue(draftSection);
 
       await expect(
-        service.findById('s-2', otherInstructorUser),
+        service.getSection('s-2', otherInstructorUser),
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw NotFoundException if the course was soft deleted', async () => {
-      mockSectionsRepo.findOne.mockResolvedValue({
-        ...publishedSection,
-        course: null,
-      });
+    // A section of a deleted course is deleted with it, so it is not found.
+    it('should throw NotFoundException when the section does not exist', async () => {
+      mockSectionsRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.findById('s-1', adminUser)).rejects.toThrow(
+      await expect(service.getSection('s-1', adminUser)).rejects.toThrow(
         NotFoundException,
       );
     });

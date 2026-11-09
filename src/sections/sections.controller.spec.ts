@@ -16,7 +16,7 @@ describe('SectionsController', () => {
 
   const mockSectionsService = {
     create: vi.fn(),
-    findById: vi.fn(),
+    getSection: vi.fn(),
     findByCourse: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
@@ -87,11 +87,11 @@ describe('SectionsController', () => {
       updatedAt,
     };
 
-    mockSectionsService.findById.mockResolvedValue(sectionDto);
+    mockSectionsService.getSection.mockResolvedValue(sectionDto);
 
     const result = await controller.findOne('s-1', mockReq);
 
-    expect(mockSectionsService.findById).toHaveBeenCalledWith('s-1', {
+    expect(mockSectionsService.getSection).toHaveBeenCalledWith('s-1', {
       sub: mockReq.user.sub,
       role: mockReq.user.role,
     });

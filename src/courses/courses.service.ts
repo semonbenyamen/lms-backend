@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { CategoriesService } from '../categories/categories.service.js';
@@ -15,6 +15,7 @@ import {
 import { CourseResponseDto } from './dto/course-response.dto.js';
 import { CreateCourseDto } from './dto/create-course.dto.js';
 import { UpdateCourseDto } from './dto/update-course.dto.js';
+import { Section } from '../sections/entities/section.entity.js';
 import { Course } from './entities/course.entity.js';
 import { toCourseResponseDto } from './transformers/course-response.transformer.js';
 
@@ -107,8 +108,12 @@ export class CoursesService {
   async remove(id: string): Promise<void> {
     const course = await this.findCourseEntity(id);
 
-    // Preserve the course record instead of permanently deleting it.
-    await this.coursesRepository.softRemove(course);
+    // Soft delete the course and its sections together, so a section is
+    // never left without a course and its own checks only need the section.
+    await this.coursesRepository.manager.transaction(async (manager) => {
+      await manager.softDelete(Section, { courseId: id, deletedAt: IsNull() });
+      await manager.softRemove(Course, course);
+    });
   }
 
   // --- Helper Methods ---
