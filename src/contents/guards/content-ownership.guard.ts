@@ -40,7 +40,12 @@ export class ContentOwnershipGuard implements CanActivate {
         : await this.findContentItemOwner(contentItemId);
 
     // Only the course owner or an admin can change its content.
-    assertOwnershipOrAdmin(user.role, user.sub, instructorId, 'manage content in');
+    assertOwnershipOrAdmin(
+      user.role,
+      user.sub,
+      instructorId,
+      'manage content in',
+    );
 
     return true;
   }
@@ -56,8 +61,9 @@ export class ContentOwnershipGuard implements CanActivate {
       relations: { section: { course: true } },
     });
 
-    // The joins come back empty when the section or the course was soft deleted.
-    if (!lesson?.section?.course) {
+    // Deleting a section or course soft deletes its lessons, so a found lesson
+    // has a section and a course.
+    if (!lesson) {
       throw new NotFoundException(`Lesson with ID ${lessonId} not found`);
     }
 
@@ -75,7 +81,9 @@ export class ContentOwnershipGuard implements CanActivate {
       relations: { lesson: { section: { course: true } } },
     });
 
-    if (!contentItem?.lesson?.section?.course) {
+    // Deleting a lesson, section or course soft deletes its content items, so a
+    // found item has a lesson, a section and a course.
+    if (!contentItem) {
       throw new NotFoundException(`Content item with ID ${id} not found`);
     }
 

@@ -1,11 +1,12 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { QueryFailedError } from 'typeorm';
+import { IsNull, QueryFailedError } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
+import { ContentItem } from '../contents/entities/content-item.entity.js';
 import { SectionsService } from '../sections/sections.service.js';
 import { Lesson } from './entities/lesson.entity.js';
 import { LessonsService } from './lessons.service.js';
@@ -22,6 +23,15 @@ describe('LessonsService', () => {
     merge: vi.fn((lesson: Lesson, dto: Partial<Lesson>) =>
       Object.assign(lesson, dto),
     ),
+    manager: {
+      transaction: vi.fn(),
+    },
+  };
+
+  // The delete runs its queries on the transaction manager.
+  const transactionManager = {
+    softDelete: vi.fn(),
+    softRemove: vi.fn(),
   };
 
   const mockSectionsService = {
@@ -54,6 +64,10 @@ describe('LessonsService', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockLessonsRepo.manager.transaction.mockImplementation(
+      (work: (manager: typeof transactionManager) => Promise<void>) =>
+        work(transactionManager),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -368,13 +382,20 @@ describe('LessonsService', () => {
       },
     };
 
-    it('should soft delete the lesson', async () => {
+    it('should soft delete the lesson and its content in one transaction', async () => {
       mockLessonsRepo.findOne.mockResolvedValue(lesson);
-      mockLessonsRepo.softRemove.mockResolvedValue(undefined);
 
       await service.remove('lesson-1');
 
-      expect(mockLessonsRepo.softRemove).toHaveBeenCalledWith(lesson);
+      expect(mockLessonsRepo.manager.transaction).toHaveBeenCalledTimes(1);
+      expect(transactionManager.softDelete).toHaveBeenCalledWith(ContentItem, {
+        lessonId: 'lesson-1',
+        deletedAt: IsNull(),
+      });
+      expect(transactionManager.softRemove).toHaveBeenCalledWith(
+        Lesson,
+        lesson,
+      );
     });
 
     it('should throw NotFoundException when the lesson does not exist', async () => {

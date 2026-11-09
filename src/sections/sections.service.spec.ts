@@ -1,15 +1,20 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { IsNull, QueryFailedError } from 'typeorm';
+import { QueryFailedError } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { CoursesService } from '../courses/courses.service.js';
-import { Lesson } from '../lessons/entities/lesson.entity.js';
+import { softDeleteSectionLessons } from '../lessons/soft-delete-section-lessons.js';
 import { Section } from './entities/section.entity.js';
 import { SectionsService } from './sections.service.js';
+
+// The lessons cascade has its own tests, so here it is only checked as a call.
+vi.mock('../lessons/soft-delete-section-lessons.js', () => ({
+  softDeleteSectionLessons: vi.fn(),
+}));
 
 describe('SectionsService', () => {
   let service: SectionsService;
@@ -30,7 +35,6 @@ describe('SectionsService', () => {
 
   // The delete runs its queries on the transaction manager.
   const transactionManager = {
-    softDelete: vi.fn(),
     softRemove: vi.fn(),
   };
 
@@ -390,16 +394,16 @@ describe('SectionsService', () => {
       },
     };
 
-    it('should soft delete the section and its lessons in one transaction', async () => {
+    it('should soft delete the section with its lessons and content in one transaction', async () => {
       mockSectionsRepo.findOne.mockResolvedValue(section);
 
       await expect(service.remove('s-1')).resolves.toBeUndefined();
 
       expect(mockSectionsRepo.manager.transaction).toHaveBeenCalledTimes(1);
-      expect(transactionManager.softDelete).toHaveBeenCalledWith(Lesson, {
-        sectionId: 's-1',
-        deletedAt: IsNull(),
-      });
+      expect(softDeleteSectionLessons).toHaveBeenCalledWith(
+        transactionManager,
+        ['s-1'],
+      );
       expect(transactionManager.softRemove).toHaveBeenCalledWith(
         Section,
         section,

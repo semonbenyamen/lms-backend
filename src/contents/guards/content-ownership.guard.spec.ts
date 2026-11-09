@@ -108,14 +108,14 @@ describe('ContentOwnershipGuard', () => {
       });
 
       await expect(
-        guard.canActivate(createContext(otherInstructor, { id: contentItemId })),
+        guard.canActivate(
+          createContext(otherInstructor, { id: contentItemId }),
+        ),
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('should throw NotFoundException when the course was soft deleted', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue({
-        lesson: { section: { course: null } },
-      });
+    it('should throw NotFoundException when the content item does not exist', async () => {
+      mockContentItemsRepo.findOne.mockResolvedValue(null);
 
       await expect(
         guard.canActivate(createContext(admin, { id: contentItemId })),
