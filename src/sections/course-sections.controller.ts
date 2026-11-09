@@ -28,7 +28,6 @@ import { CreateSectionDto } from './dto/create-section.dto.js';
 import { SectionResponseDto } from './dto/section-response.dto.js';
 import { SectionsService } from './sections.service.js';
 import { SectionOwnershipGuard } from './guards/section-ownership.guard.js';
-import { toSectionResponseDto } from './transformers/section-response.transformer.js';
 
 const NOT_COURSE_OWNER = 'Forbidden - not course owner or admin';
 
@@ -81,11 +80,9 @@ export class CourseSectionsController {
     @Param('courseId', new ParseUUIDPipe()) courseId: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<SectionResponseDto[]> {
-    const sections = await this.sectionsService.findByCourse(courseId, {
+    return this.sectionsService.findByCourse(courseId, {
       sub: request.user.sub,
       role: request.user.role,
     });
-
-    return sections.map(toSectionResponseDto);
   }
 }

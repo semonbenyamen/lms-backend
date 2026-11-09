@@ -1,10 +1,11 @@
+
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { QueryFailedError } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { JwtPayload } from '../auth/types/authenticated-request.type.js';
+import type { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { CoursesService } from '../courses/courses.service.js';
 import { Section } from './entities/section.entity.js';
@@ -19,7 +20,9 @@ describe('SectionsService', () => {
     findOne: vi.fn(),
     find: vi.fn(),
     softRemove: vi.fn(),
-    merge: vi.fn((section, dto) => Object.assign(section, dto)),
+    merge: vi.fn((section: Section, dto: Partial<Section>) =>
+      Object.assign(section, dto),
+    ),
   };
 
   const mockCoursesService = {
@@ -93,15 +96,17 @@ describe('SectionsService', () => {
       mockSectionsRepo.create.mockReturnValue(section);
       mockSectionsRepo.save.mockResolvedValue(section);
 
-      // Authorization is now handled by SectionOwnershipGuard.
-      const result = await service.create('c-1', dto);
+      // Authorization is handled by SectionOwnershipGuard.
+      await expect(service.create('c-1', dto)).resolves.toBeUndefined();
 
-      expect(result).toEqual(section);
       expect(mockCoursesService.findById).toHaveBeenCalledWith('c-1');
+
       expect(mockSectionsRepo.create).toHaveBeenCalledWith({
         courseId: 'c-1',
         ...dto,
       });
+
+      expect(mockSectionsRepo.save).toHaveBeenCalledWith(section);
     });
 
     it('should throw NotFoundException if course does not exist', async () => {
@@ -110,6 +115,8 @@ describe('SectionsService', () => {
       await expect(service.create('unknown-c', dto)).rejects.toThrow(
         NotFoundException,
       );
+
+      expect(mockSectionsRepo.save).not.toHaveBeenCalled();
     });
 
     it('should throw ConflictException if the orderIndex is taken', async () => {
@@ -137,24 +144,49 @@ describe('SectionsService', () => {
   });
 
   describe('findById', () => {
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+    const updatedAt = new Date('2026-01-02T00:00:00.000Z');
+
     const publishedSection = {
       id: 's-1',
+      courseId: 'c-1',
       title: 'Section 1',
+      orderIndex: 1,
+      createdAt,
+      updatedAt,
       course: {
         instructorId: instructorUser.sub,
         isPublished: true,
       },
-      lessons: [],
     };
 
     const draftSection = {
+      ...publishedSection,
       id: 's-2',
       title: 'Draft Section',
+      orderIndex: 2,
       course: {
         instructorId: instructorUser.sub,
         isPublished: false,
       },
-      lessons: [],
+    };
+
+    const expectedPublishedSection = {
+      id: 's-1',
+      courseId: 'c-1',
+      title: 'Section 1',
+      orderIndex: 1,
+      createdAt,
+      updatedAt,
+    };
+
+    const expectedDraftSection = {
+      id: 's-2',
+      courseId: 'c-1',
+      title: 'Draft Section',
+      orderIndex: 2,
+      createdAt,
+      updatedAt,
     };
 
     it('should return published section to student', async () => {
@@ -162,7 +194,7 @@ describe('SectionsService', () => {
 
       const result = await service.findById('s-1', studentUser);
 
-      expect(result).toEqual(publishedSection);
+      expect(result).toEqual(expectedPublishedSection);
     });
 
     it('should throw NotFoundException to student for draft section', async () => {
@@ -178,7 +210,7 @@ describe('SectionsService', () => {
 
       const result = await service.findById('s-2', instructorUser);
 
-      expect(result).toEqual(draftSection);
+      expect(result).toEqual(expectedDraftSection);
     });
 
     it('should return draft section to admin', async () => {
@@ -186,7 +218,7 @@ describe('SectionsService', () => {
 
       const result = await service.findById('s-2', adminUser);
 
-      expect(result).toEqual(draftSection);
+      expect(result).toEqual(expectedDraftSection);
     });
 
     it('should throw NotFoundException to other instructor for draft section', async () => {
@@ -226,20 +258,53 @@ describe('SectionsService', () => {
     });
 
     it('should return all sections without pagination', async () => {
+      const createdAt = new Date('2026-01-01T00:00:00.000Z');
+      const updatedAt = new Date('2026-01-02T00:00:00.000Z');
+
       const sections = [
-        { id: 's-1', courseId: 'c-1', orderIndex: 1 },
-        { id: 's-2', courseId: 'c-1', orderIndex: 2 },
+        {
+          id: 's-1',
+          courseId: 'c-1',
+          title: 'Section 1',
+          orderIndex: 1,
+          createdAt,
+          updatedAt,
+        },
+        {
+          id: 's-2',
+          courseId: 'c-1',
+          title: 'Section 2',
+          orderIndex: 2,
+          createdAt,
+          updatedAt,
+        },
       ];
 
       mockCoursesService.findById.mockResolvedValue(draftCourse);
       mockSectionsRepo.find.mockResolvedValue(sections);
 
-      // Verify that all sections are returned without pagination.
       const result = await service.findByCourse('c-1', instructorUser);
 
-      expect(result).toEqual(sections);
+      expect(result).toEqual([
+        {
+          id: 's-1',
+          courseId: 'c-1',
+          title: 'Section 1',
+          orderIndex: 1,
+          createdAt,
+          updatedAt,
+        },
+        {
+          id: 's-2',
+          courseId: 'c-1',
+          title: 'Section 2',
+          orderIndex: 2,
+          createdAt,
+          updatedAt,
+        },
+      ]);
 
-      // Verify that the database query has no skip or take limits.
+      // Verify that the query has no pagination limits.
       expect(mockSectionsRepo.find).toHaveBeenCalledWith({
         where: { courseId: 'c-1' },
         order: { orderIndex: 'ASC' },
@@ -268,9 +333,13 @@ describe('SectionsService', () => {
       mockSectionsRepo.findOne.mockResolvedValue({ ...section });
       mockSectionsRepo.save.mockImplementation((s) => Promise.resolve(s));
 
-      const result = await service.update('s-1', { title: 'New' });
+      await expect(
+        service.update('s-1', { title: 'New' }),
+      ).resolves.toBeUndefined();
 
-      expect(result.title).toBe('New');
+      expect(mockSectionsRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'New' }),
+      );
     });
 
     it('should update orderIndex to 0', async () => {
@@ -286,9 +355,11 @@ describe('SectionsService', () => {
       mockSectionsRepo.findOne.mockResolvedValue({ ...section });
       mockSectionsRepo.save.mockImplementation(async (entity) => entity);
 
-      const result = await service.update('s-1', { orderIndex: 0 });
+      await expect(
+        service.update('s-1', { orderIndex: 0 }),
+      ).resolves.toBeUndefined();
 
-      // Verify that merge preserves zero as a valid orderIndex.
+      // Verify that zero is a valid orderIndex.
       expect(mockSectionsRepo.merge).toHaveBeenCalledWith(expect.anything(), {
         orderIndex: 0,
       });
@@ -296,14 +367,13 @@ describe('SectionsService', () => {
       expect(mockSectionsRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({ orderIndex: 0 }),
       );
-
-      expect(result.orderIndex).toBe(0);
     });
   });
 
   describe('remove', () => {
     const section = {
       id: 's-1',
+      courseId: 'c-1',
       course: {
         instructorId: instructorUser.sub,
       },
@@ -313,7 +383,7 @@ describe('SectionsService', () => {
       mockSectionsRepo.findOne.mockResolvedValue(section);
       mockSectionsRepo.softRemove.mockResolvedValue(undefined);
 
-      await service.remove('s-1');
+      await expect(service.remove('s-1')).resolves.toBeUndefined();
 
       expect(mockSectionsRepo.softRemove).toHaveBeenCalledWith(section);
     });

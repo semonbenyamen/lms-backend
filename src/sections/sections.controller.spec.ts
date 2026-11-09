@@ -63,10 +63,7 @@ describe('SectionsController', () => {
       orderIndex: 1,
     };
 
-    mockSectionsService.create.mockResolvedValue({
-      id: 's-1',
-      ...dto,
-    });
+    mockSectionsService.create.mockResolvedValue(undefined);
 
     const result = await courseSectionsController.create('c-1', dto);
 
@@ -76,24 +73,21 @@ describe('SectionsController', () => {
     expect(result).toBeUndefined();
   });
 
-  it('should return only public fields when getting a section by ID', async () => {
+  it('should return the section DTO provided by the service', async () => {
     const createdAt = new Date('2026-11-01T10:00:00.000Z');
     const updatedAt = new Date('2026-11-02T10:00:00.000Z');
 
-    const section = {
+    // The service is responsible for transforming entities into DTOs.
+    const sectionDto = {
       id: 's-1',
       courseId: 'c-1',
       title: 'Chapter 1',
       orderIndex: 1,
       createdAt,
       updatedAt,
-      deletedAt: null,
-      course: {
-        instructorId: 'instructor-1',
-      },
     };
 
-    mockSectionsService.findById.mockResolvedValue(section);
+    mockSectionsService.findById.mockResolvedValue(sectionDto);
 
     const result = await controller.findOne('s-1', mockReq);
 
@@ -102,25 +96,18 @@ describe('SectionsController', () => {
       role: mockReq.user.role,
     });
 
-    // Only public DTO fields should be returned.
-    expect(result).toEqual({
-      id: 's-1',
-      courseId: 'c-1',
-      title: 'Chapter 1',
-      orderIndex: 1,
-      createdAt,
-      updatedAt,
-    });
+    // The controller should return the service DTO unchanged.
+    expect(result).toEqual(sectionDto);
 
     expect(result).not.toHaveProperty('course');
     expect(result).not.toHaveProperty('deletedAt');
   });
 
-  it('should transform all sections in the list', async () => {
+  it('should return all section DTOs provided by the service', async () => {
     const createdAt = new Date('2026-11-01T10:00:00.000Z');
     const updatedAt = new Date('2026-11-02T10:00:00.000Z');
 
-    const sections = [
+    const sectionDtos = [
       {
         id: 's-1',
         courseId: 'c-1',
@@ -128,7 +115,6 @@ describe('SectionsController', () => {
         orderIndex: 1,
         createdAt,
         updatedAt,
-        deletedAt: null,
       },
       {
         id: 's-2',
@@ -137,42 +123,23 @@ describe('SectionsController', () => {
         orderIndex: 2,
         createdAt,
         updatedAt,
-        course: {
-          instructorId: 'instructor-1',
-        },
       },
     ];
 
-    mockSectionsService.findByCourse.mockResolvedValue(sections);
+    mockSectionsService.findByCourse.mockResolvedValue(sectionDtos);
 
     const result = await courseSectionsController.findByCourse('c-1', mockReq);
 
-    // Verify that the controller passes course ID and user details without pagination.
+    // Pass course ID and user details without pagination.
     expect(mockSectionsService.findByCourse).toHaveBeenCalledWith('c-1', {
       sub: mockReq.user.sub,
       role: mockReq.user.role,
     });
 
-    // Every section must be transformed into its public DTO.
-    expect(result).toEqual([
-      {
-        id: 's-1',
-        courseId: 'c-1',
-        title: 'Chapter 1',
-        orderIndex: 1,
-        createdAt,
-        updatedAt,
-      },
-      {
-        id: 's-2',
-        courseId: 'c-1',
-        title: 'Chapter 2',
-        orderIndex: 2,
-        createdAt,
-        updatedAt,
-      },
-    ]);
+    // The controller should return the DTO list unchanged.
+    expect(result).toEqual(sectionDtos);
 
+    expect(result).toHaveLength(2);
     expect(result[0]).not.toHaveProperty('deletedAt');
     expect(result[1]).not.toHaveProperty('course');
   });
@@ -180,10 +147,7 @@ describe('SectionsController', () => {
   it('should update section without returning data', async () => {
     const dto = { title: 'New' };
 
-    mockSectionsService.update.mockResolvedValue({
-      id: 's-1',
-      title: 'New',
-    });
+    mockSectionsService.update.mockResolvedValue(undefined);
 
     const result = await controller.update('s-1', dto);
 
