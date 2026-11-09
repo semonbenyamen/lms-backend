@@ -1,3 +1,4 @@
+
 import {
   ConflictException,
   Injectable,
@@ -12,8 +13,10 @@ import { isUniqueViolation } from '../common/database/is-unique-violation.js';
 import { CoursesService } from '../courses/courses.service.js';
 import { Lesson } from '../lessons/entities/lesson.entity.js';
 import { CreateSectionDto } from './dto/create-section.dto.js';
+import { SectionResponseDto } from './dto/section-response.dto.js';
 import { UpdateSectionDto } from './dto/update-section.dto.js';
 import { Section } from './entities/section.entity.js';
+import { toSectionResponseDto } from './transformers/section-response.transformer.js';
 
 // Only the user ID and role are needed for section permissions.
 type SectionActor = Pick<JwtPayload, 'sub' | 'role'>;
@@ -30,7 +33,7 @@ export class SectionsService {
     private readonly coursesService: CoursesService,
   ) {}
 
-  async create(courseId: string, dto: CreateSectionDto): Promise<Section> {
+  async create(courseId: string, dto: CreateSectionDto): Promise<void> {
     // Ensure the parent course exists.
     await this.coursesService.findById(courseId);
 
@@ -40,10 +43,13 @@ export class SectionsService {
       orderIndex: dto.orderIndex,
     });
 
-    return this.saveSection(section);
+    await this.saveSection(section);
   }
 
-  async findById(id: string, user: SectionActor): Promise<Section> {
+  async findById(
+    id: string,
+    user: SectionActor,
+  ): Promise<SectionResponseDto> {
     const section = await this.sectionsRepository.findOne({
       where: { id },
       relations: {
@@ -51,15 +57,18 @@ export class SectionsService {
       },
     });
 
-    // The course is empty when it was soft deleted, because the join skips deleted rows.
+    // The course is empty when it was soft deleted.
     if (!section || !section.course || !canReadCourse(section.course, user)) {
       throw new NotFoundException(`Section with ID ${id} not found`);
     }
 
-    return section;
+    return toSectionResponseDto(section);
   }
 
-  async findByCourse(courseId: string, user: SectionActor): Promise<Section[]> {
+  async findByCourse(
+    courseId: string,
+    user: SectionActor,
+  ): Promise<SectionResponseDto[]> {
     // Check that the course exists.
     const course = await this.coursesService.findById(courseId);
 
@@ -68,22 +77,25 @@ export class SectionsService {
       throw new NotFoundException(`Course with ID ${courseId} not found`);
     }
 
-    // Return all sections ordered by their position.
-    return this.sectionsRepository.find({
+    // Get all sections ordered by their position.
+    const sections = await this.sectionsRepository.find({
       where: { courseId },
       order: {
         orderIndex: 'ASC',
       },
     });
+
+    // Transform each section into a response DTO.
+    return sections.map(toSectionResponseDto);
   }
 
-  async update(id: string, dto: UpdateSectionDto): Promise<Section> {
+  async update(id: string, dto: UpdateSectionDto): Promise<void> {
     const section = await this.findSectionWithCourse(id);
 
     // Apply only the fields provided in the update request.
     this.sectionsRepository.merge(section, dto);
 
-    return this.saveSection(section);
+    await this.saveSection(section);
   }
 
   async remove(id: string): Promise<void> {
@@ -113,17 +125,21 @@ export class SectionsService {
           `Another section in this course already uses orderIndex ${section.orderIndex}`,
         );
       }
+
       throw error;
     }
   }
 
+  // Used by LessonsService to verify the parent section and course.
   async findSectionWithCourse(id: string): Promise<Section> {
     const section = await this.sectionsRepository.findOne({
       where: { id },
-      relations: { course: true },
+      relations: {
+        course: true,
+      },
     });
 
-    // The course is empty when it was soft deleted, because the join skips deleted rows.
+    // A section whose course was soft deleted is not accessible.
     if (!section || !section.course) {
       throw new NotFoundException(`Section with ID ${id} not found`);
     }

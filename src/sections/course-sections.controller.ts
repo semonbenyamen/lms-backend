@@ -1,3 +1,4 @@
+
 import {
   Body,
   Controller,
@@ -28,7 +29,6 @@ import { CreateSectionDto } from './dto/create-section.dto.js';
 import { SectionResponseDto } from './dto/section-response.dto.js';
 import { SectionsService } from './sections.service.js';
 import { SectionOwnershipGuard } from './guards/section-ownership.guard.js';
-import { toSectionResponseDto } from './transformers/section-response.transformer.js';
 
 const NOT_COURSE_OWNER = 'Forbidden - not course owner or admin';
 
@@ -50,7 +50,6 @@ export class CourseSectionsController {
     description: 'Section created successfully',
     type: ApiResponseDto,
   })
-
   // Shared error responses automatically include 401 Unauthorized.
   @ApiAuthErrorResponses({
     [HttpStatus.BAD_REQUEST]: 'Invalid request body or UUID format',
@@ -81,13 +80,9 @@ export class CourseSectionsController {
     @Param('courseId', new ParseUUIDPipe()) courseId: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<SectionResponseDto[]> {
-    // Get all sections the user is allowed to view.
-    const sections = await this.sectionsService.findByCourse(courseId, {
+    return this.sectionsService.findByCourse(courseId, {
       sub: request.user.sub,
       role: request.user.role,
     });
-
-    // Transform sections into the API response format.
-    return sections.map(toSectionResponseDto);
   }
 }

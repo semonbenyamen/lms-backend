@@ -13,6 +13,16 @@ describe('CategoriesService', () => {
 
   const category = { id: 'category-1', name: 'Backend Development' };
 
+  const timestamp = new Date('2026-11-01T10:00:00.000Z');
+  const categoryResponse = {
+    ...category,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  // deletedAt is internal and must not reach the response.
+  const categoryEntity = { ...categoryResponse, deletedAt: null };
+
   const databaseError = (code: string) =>
     new QueryFailedError('query', [], Object.assign(new Error(), { code }));
 
@@ -34,7 +44,7 @@ describe('CategoriesService', () => {
       ...data,
     })),
     save: vi.fn(),
-    remove: vi.fn(),
+    softRemove: vi.fn(),
     existsBy: vi.fn(),
     createQueryBuilder: vi.fn(() => queryBuilder),
   };
@@ -50,7 +60,7 @@ describe('CategoriesService', () => {
     mockCategoriesRepo.save.mockImplementation((data: Partial<Category>) =>
       Promise.resolve({ id: 'category-1', ...data }),
     );
-    mockCategoriesRepo.remove.mockResolvedValue(undefined);
+    mockCategoriesRepo.softRemove.mockResolvedValue(undefined);
     mockCoursesRepo.exists.mockResolvedValue(false);
 
     const module: TestingModule = await Test.createTestingModule({
@@ -72,21 +82,18 @@ describe('CategoriesService', () => {
 
   describe('findAll', () => {
     beforeEach(() => {
-      queryBuilder.getManyAndCount.mockResolvedValue([[category], 21]);
+      queryBuilder.getManyAndCount.mockResolvedValue([[categoryEntity], 21]);
     });
 
-    it('should return a page of categories by name with the meta', async () => {
+    it('should return a page of categories by name without internal fields', async () => {
       const result = await service.findAll({ page: 2, limit: 10 });
 
-      expect(queryBuilder.orderBy).toHaveBeenCalledWith(
-        'category.name',
-        'ASC',
-      );
+      expect(queryBuilder.orderBy).toHaveBeenCalledWith('category.name', 'ASC');
       expect(queryBuilder.skip).toHaveBeenCalledWith(10);
       expect(queryBuilder.take).toHaveBeenCalledWith(10);
       expect(queryBuilder.where).not.toHaveBeenCalled();
       expect(result).toEqual({
-        items: [category],
+        items: [categoryResponse],
         meta: {
           total: 21,
           page: 2,
@@ -117,7 +124,15 @@ describe('CategoriesService', () => {
     });
   });
 
-  it('should find a category by id', async () => {
+  it('should get a category without internal fields', async () => {
+    mockCategoriesRepo.findOneBy.mockResolvedValue(categoryEntity);
+
+    await expect(service.getCategory('category-1')).resolves.toEqual(
+      categoryResponse,
+    );
+  });
+
+  it('should find a category entity by id', async () => {
     await expect(service.findById('category-1')).resolves.toEqual(category);
   });
 
@@ -133,7 +148,8 @@ describe('CategoriesService', () => {
     it('should create a new category', async () => {
       const result = await service.create({ name: 'Backend Development' });
 
-      expect(result).toEqual(category);
+      // Only the new id is returned.
+      expect(result).toEqual({ id: 'category-1' });
     });
 
     it('should return conflict when two requests add the same name', async () => {
@@ -217,36 +233,27 @@ describe('CategoriesService', () => {
   });
 
   describe('remove', () => {
-    it('should delete a category without courses', async () => {
+    it('should soft delete a category without active courses', async () => {
       await service.remove('category-1');
 
-      expect(mockCategoriesRepo.remove).toHaveBeenCalledWith(category);
+      expect(mockCategoriesRepo.softRemove).toHaveBeenCalledWith(category);
     });
 
-    it('should count soft deleted courses', async () => {
+    it('should ignore soft deleted courses', async () => {
       await service.remove('category-1');
 
       expect(mockCoursesRepo.exists).toHaveBeenCalledWith({
         where: { categoryId: 'category-1' },
-        withDeleted: true,
       });
     });
 
-    it('should reject deleting a category with courses', async () => {
+    it('should reject deleting a category with active courses', async () => {
       mockCoursesRepo.exists.mockResolvedValue(true);
 
       await expect(service.remove('category-1')).rejects.toThrow(
         ConflictException,
       );
-      expect(mockCategoriesRepo.remove).not.toHaveBeenCalled();
-    });
-
-    it('should return conflict when a course is added during the delete', async () => {
-      mockCategoriesRepo.remove.mockRejectedValue(databaseError('23503'));
-
-      await expect(service.remove('category-1')).rejects.toThrow(
-        ConflictException,
-      );
+      expect(mockCategoriesRepo.softRemove).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException for an unknown category', async () => {

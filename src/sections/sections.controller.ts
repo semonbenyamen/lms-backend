@@ -30,12 +30,11 @@ import { SectionResponseDto } from './dto/section-response.dto.js';
 import { UpdateSectionDto } from './dto/update-section.dto.js';
 import { SectionsService } from './sections.service.js';
 import { SectionOwnershipGuard } from './guards/section-ownership.guard.js';
-import { toSectionResponseDto } from './transformers/section-response.transformer.js';
 
 @ApiTags('Sections')
 @Controller('sections')
 export class SectionsController {
-  constructor(private readonly sectionsService: SectionsService) { }
+  constructor(private readonly sectionsService: SectionsService) {}
 
   @Get(':id')
   @UseGuards(JwtAuthGuard)
@@ -47,20 +46,15 @@ export class SectionsController {
     [HttpStatus.BAD_REQUEST]: 'Invalid UUID format',
     [HttpStatus.NOT_FOUND]: 'Section not found or unpublished',
   })
-
   async findOne(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<SectionResponseDto> {
-    const section = await this.sectionsService.findById(id, {
+    return this.sectionsService.findById(id, {
       sub: request.user.sub,
       role: request.user.role,
     });
-
-    // Transform the entity before returning it to the client.
-    return toSectionResponseDto(section);
   }
-
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard, SectionOwnershipGuard)
@@ -78,8 +72,6 @@ export class SectionsController {
     [HttpStatus.NOT_FOUND]: 'Section not found',
     [HttpStatus.CONFLICT]: 'orderIndex is already used in this course',
   })
-
-
   async update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateSectionDto,
@@ -87,8 +79,6 @@ export class SectionsController {
     // Update the section without returning its data.
     await this.sectionsService.update(id, dto);
   }
-
-
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -105,12 +95,8 @@ export class SectionsController {
     [HttpStatus.FORBIDDEN]: 'Forbidden - not course owner or admin',
     [HttpStatus.NOT_FOUND]: 'Section not found',
   })
-
-  remove(
-    @Param('id', new ParseUUIDPipe()) id: string,
-  ) {
+  remove(@Param('id', new ParseUUIDPipe()) id: string) {
     // Ownership is verified by SectionOwnershipGuard.
     return this.sectionsService.remove(id);
   }
-
 }

@@ -27,11 +27,13 @@ describe('toCourseResponseDto', () => {
       prerequisites: null,
       estimatedDuration: 120,
       isPublished: false,
+      thumbnailUrl: 'https://res.cloudinary.com/demo/image/upload/c.webp',
       instructorId: 'instructor-1',
       createdAt,
       updatedAt,
 
       // Internal fields must not be exposed.
+      thumbnailPublicId: 'lms/courses/c',
       deletedAt: null,
       instructor: { id: 'instructor-1', password: 'hash' },
     } as unknown as Course;
@@ -48,6 +50,7 @@ describe('toCourseResponseDto', () => {
       prerequisites: null,
       estimatedDuration: 120,
       isPublished: false,
+      thumbnailUrl: 'https://res.cloudinary.com/demo/image/upload/c.webp',
       instructorId: 'instructor-1',
       createdAt,
       updatedAt,

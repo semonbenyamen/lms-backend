@@ -17,7 +17,7 @@ describe('CoursesController', () => {
   const mockCoursesService = {
     create: vi.fn(),
     findAll: vi.fn(),
-    findById: vi.fn(),
+    getCourse: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
   };
@@ -42,16 +42,10 @@ describe('CoursesController', () => {
     prerequisites: null,
     estimatedDuration: null,
     isPublished: false,
+    thumbnailUrl: null,
     instructorId: 'instructor-1',
     createdAt: new Date('2026-11-01T10:00:00.000Z'),
     updatedAt: new Date('2026-11-02T10:00:00.000Z'),
-  };
-
-  // Internal fields must not reach the response.
-  const courseEntity = {
-    ...courseResponse,
-    deletedAt: null,
-    instructor: { id: 'instructor-1', password: 'hash' },
   };
 
   beforeEach(async () => {
@@ -77,7 +71,7 @@ describe('CoursesController', () => {
     controller = module.get<CoursesController>(CoursesController);
   });
 
-  it('should create a course with only the instructor id', async () => {
+  it('should create a course for the current instructor and return its id', async () => {
     const dto = {
       title: 'Course 1',
       description: 'Desc',
@@ -87,10 +81,7 @@ describe('CoursesController', () => {
       language: CourseLanguage.ENGLISH,
     };
 
-    mockCoursesService.create.mockResolvedValue({
-      id: 'c-1',
-      ...dto,
-    });
+    mockCoursesService.create.mockResolvedValue({ id: 'c-1' });
 
     const result = await controller.create(dto, mockInstructorReq);
 
@@ -98,12 +89,10 @@ describe('CoursesController', () => {
       dto,
       mockInstructorReq.user.sub,
     );
-
-    // Create returns only the new id.
     expect(result).toEqual({ id: 'c-1' });
   });
 
-  it('should list courses for the current user without internal fields', async () => {
+  it('should list courses for the current user', async () => {
     const pagination = { page: 1, limit: 10 };
     const meta = {
       total: 1,
@@ -115,7 +104,7 @@ describe('CoursesController', () => {
     };
 
     mockCoursesService.findAll.mockResolvedValue({
-      items: [courseEntity],
+      items: [courseResponse],
       meta,
     });
 
@@ -128,12 +117,12 @@ describe('CoursesController', () => {
     expect(result).toEqual({ items: [courseResponse], meta });
   });
 
-  it('should get course details without internal fields', async () => {
-    mockCoursesService.findById.mockResolvedValue(courseEntity);
+  it('should get course details', async () => {
+    mockCoursesService.getCourse.mockResolvedValue(courseResponse);
 
     const result = await controller.findOne('c-1');
 
-    expect(mockCoursesService.findById).toHaveBeenCalledWith('c-1');
+    expect(mockCoursesService.getCourse).toHaveBeenCalledWith('c-1');
     expect(result).toEqual(courseResponse);
   });
 

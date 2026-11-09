@@ -18,6 +18,7 @@ export function toCourseResponseDto(course: Course): CourseResponseDto {
     prerequisites: course.prerequisites,
     estimatedDuration: course.estimatedDuration,
     isPublished: course.isPublished,
+    thumbnailUrl: course.thumbnailUrl,
     instructorId: course.instructorId,
     createdAt: course.createdAt,
     updatedAt: course.updatedAt,
