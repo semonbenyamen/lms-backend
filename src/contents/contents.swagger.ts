@@ -8,7 +8,8 @@ import { ApiResponseDto } from '../common/dto/api-response.dto.js';
 import { ContentItemResponseDto } from './dto/content-item-response.dto.js';
 
 const NOT_COURSE_OWNER = 'Forbidden - not course owner or admin';
-const ORDER_INDEX_USED = 'orderIndex is already used in this lesson';
+const ORDER_INDEX_USED =
+  'orderIndex is already used in this lesson, or the uploaded file is used by another item';
 const INVALID_BODY =
   'Invalid request body, UUID format or missing field of the content type';
 

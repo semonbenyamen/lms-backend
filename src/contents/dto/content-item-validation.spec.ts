@@ -55,4 +55,19 @@ describe('UpdateContentItemDto', () => {
       await invalidFields({ durationSeconds: MAX_VIDEO_DURATION_SECONDS + 1 }),
     ).toEqual(['durationSeconds']);
   });
+
+  it('should accept an uploaded file public id', async () => {
+    expect(
+      await invalidFields({ mediaPublicId: 'lms/lessons/l-1/file-1' }),
+    ).toEqual([]);
+  });
+
+  it('should reject an empty or too long public id', async () => {
+    expect(await invalidFields({ mediaPublicId: '' })).toEqual([
+      'mediaPublicId',
+    ]);
+    expect(await invalidFields({ mediaPublicId: 'a'.repeat(256) })).toEqual([
+      'mediaPublicId',
+    ]);
+  });
 });

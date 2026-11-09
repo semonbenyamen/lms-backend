@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -37,6 +38,8 @@ describe('ContentsService', () => {
 
   const mockCloudinaryService = {
     createUploadSignature: vi.fn(),
+    getAssetDetails: vi.fn(),
+    deleteFile: vi.fn(),
   };
 
   const instructorUser: JwtPayload = {
@@ -138,6 +141,8 @@ describe('ContentsService', () => {
     });
 
     it('should reject content without the field of its type', async () => {
+      mockContentItemsRepo.create.mockImplementation((c) => c);
+
       await expect(
         service.create('l-1', {
           title: 'Image',
@@ -185,6 +190,247 @@ describe('ContentsService', () => {
     [],
     Object.assign(new Error('duplicate key'), { code: '23505' }),
   );
+
+  describe('uploaded media', () => {
+    const lessonId = 'l-1';
+    const videoId = 'lms/lessons/l-1/video-1';
+    const videoAsset = {
+      secureUrl: 'https://res.cloudinary.com/demo/video/upload/video-1.mp4',
+      publicId: videoId,
+      resourceType: 'video',
+      format: 'mp4',
+      bytes: 1024,
+    };
+
+    const videoDto = {
+      title: 'Video',
+      contentType: ContentType.VIDEO,
+      mediaPublicId: videoId,
+      orderIndex: 1,
+    };
+
+    beforeEach(() => {
+      mockContentItemsRepo.create.mockImplementation((c) => ({ ...c }));
+      mockContentItemsRepo.save.mockImplementation((c) => Promise.resolve(c));
+    });
+
+    describe('create', () => {
+      it('should fill the link from the uploaded file and keep its public id', async () => {
+        mockCloudinaryService.getAssetDetails.mockResolvedValue(videoAsset);
+
+        await service.create(lessonId, videoDto);
+
+        expect(mockCloudinaryService.getAssetDetails).toHaveBeenCalledWith(
+          videoId,
+          CloudinaryResourceType.VIDEO,
+        );
+        expect(mockContentItemsRepo.save).toHaveBeenCalledWith({
+          title: 'Video',
+          contentType: ContentType.VIDEO,
+          orderIndex: 1,
+          lessonId,
+          bodyText: null,
+          videoUrl: videoAsset.secureUrl,
+          imageUrl: null,
+          durationSeconds: null,
+          mediaPublicId: videoId,
+        });
+      });
+
+      it('should save a link without a public id', async () => {
+        await service.create(lessonId, {
+          title: 'Video',
+          contentType: ContentType.VIDEO,
+          videoUrl: 'https://example.com/v.mp4',
+          orderIndex: 1,
+        });
+
+        expect(mockCloudinaryService.getAssetDetails).not.toHaveBeenCalled();
+        expect(mockContentItemsRepo.save).toHaveBeenCalledWith(
+          expect.objectContaining({
+            videoUrl: 'https://example.com/v.mp4',
+            mediaPublicId: null,
+          }),
+        );
+      });
+
+      it('should reject a file uploaded for another lesson', async () => {
+        await expect(
+          service.create(lessonId, {
+            ...videoDto,
+            mediaPublicId: 'lms/lessons/l-2/video-1',
+          }),
+        ).rejects.toThrow('The uploaded file does not belong to this lesson');
+        expect(mockCloudinaryService.getAssetDetails).not.toHaveBeenCalled();
+      });
+
+      it('should reject a file that is not on Cloudinary', async () => {
+        mockCloudinaryService.getAssetDetails.mockResolvedValue(null);
+
+        await expect(service.create(lessonId, videoDto)).rejects.toThrow(
+          'The uploaded file was not found',
+        );
+        expect(mockContentItemsRepo.save).not.toHaveBeenCalled();
+      });
+
+      it('should reject a file with a format that is not allowed', async () => {
+        mockCloudinaryService.getAssetDetails.mockResolvedValue({
+          ...videoAsset,
+          format: 'avi',
+        });
+
+        await expect(service.create(lessonId, videoDto)).rejects.toThrow(
+          BadRequestException,
+        );
+        expect(mockContentItemsRepo.save).not.toHaveBeenCalled();
+      });
+
+      it('should reject a link and a public id together', async () => {
+        await expect(
+          service.create(lessonId, {
+            ...videoDto,
+            videoUrl: 'https://example.com/v.mp4',
+          }),
+        ).rejects.toThrow('Send either mediaPublicId or a link, not both');
+      });
+
+      it('should reject a public id for text content', async () => {
+        await expect(
+          service.create(lessonId, {
+            ...videoDto,
+            contentType: ContentType.TEXT,
+            bodyText: 'Hello',
+          }),
+        ).rejects.toThrow('mediaPublicId is not allowed for text content');
+      });
+
+      it('should return 409 when the file is used by another item', async () => {
+        mockCloudinaryService.getAssetDetails.mockResolvedValue(videoAsset);
+        mockContentItemsRepo.save.mockRejectedValue(
+          new QueryFailedError(
+            'INSERT',
+            [],
+            Object.assign(new Error('duplicate key'), {
+              code: '23505',
+              constraint: 'UQ_content_items_media_public_id',
+            }),
+          ),
+        );
+
+        await expect(service.create(lessonId, videoDto)).rejects.toThrow(
+          'This uploaded file is already used by another content item',
+        );
+      });
+    });
+
+    describe('update', () => {
+      const storedVideo = () => ({
+        id: 'ci-1',
+        lessonId,
+        title: 'Video',
+        contentType: ContentType.VIDEO,
+        bodyText: null,
+        videoUrl: 'https://res.cloudinary.com/demo/video/upload/old.mp4',
+        imageUrl: null,
+        durationSeconds: null,
+        mediaPublicId: 'lms/lessons/l-1/old',
+      });
+
+      it('should delete the old file after saving a new one', async () => {
+        mockContentItemsRepo.findOne.mockResolvedValue(storedVideo());
+        mockCloudinaryService.getAssetDetails.mockResolvedValue(videoAsset);
+
+        await service.update('ci-1', { mediaPublicId: videoId });
+
+        expect(mockContentItemsRepo.save).toHaveBeenCalledWith(
+          expect.objectContaining({
+            videoUrl: videoAsset.secureUrl,
+            mediaPublicId: videoId,
+          }),
+        );
+        expect(mockCloudinaryService.deleteFile).toHaveBeenCalledWith(
+          'lms/lessons/l-1/old',
+          CloudinaryResourceType.VIDEO,
+        );
+      });
+
+      it('should delete the old file when a link replaces it', async () => {
+        mockContentItemsRepo.findOne.mockResolvedValue(storedVideo());
+
+        await service.update('ci-1', {
+          videoUrl: 'https://example.com/new.mp4',
+        });
+
+        expect(mockContentItemsRepo.save).toHaveBeenCalledWith(
+          expect.objectContaining({
+            videoUrl: 'https://example.com/new.mp4',
+            mediaPublicId: null,
+          }),
+        );
+        expect(mockCloudinaryService.deleteFile).toHaveBeenCalledWith(
+          'lms/lessons/l-1/old',
+          CloudinaryResourceType.VIDEO,
+        );
+      });
+
+      it('should delete the old file when the item becomes text', async () => {
+        mockContentItemsRepo.findOne.mockResolvedValue(storedVideo());
+
+        await service.update('ci-1', {
+          contentType: ContentType.TEXT,
+          bodyText: 'Now text',
+        });
+
+        expect(mockContentItemsRepo.save).toHaveBeenCalledWith(
+          expect.objectContaining({ videoUrl: null, mediaPublicId: null }),
+        );
+        expect(mockCloudinaryService.deleteFile).toHaveBeenCalledWith(
+          'lms/lessons/l-1/old',
+          CloudinaryResourceType.VIDEO,
+        );
+      });
+
+      it('should keep the file when other fields change', async () => {
+        mockContentItemsRepo.findOne.mockResolvedValue(storedVideo());
+
+        await service.update('ci-1', { title: 'New title' });
+
+        expect(mockContentItemsRepo.save).toHaveBeenCalledWith(
+          expect.objectContaining({ mediaPublicId: 'lms/lessons/l-1/old' }),
+        );
+        expect(mockCloudinaryService.deleteFile).not.toHaveBeenCalled();
+      });
+
+      it('should not delete the old file when the save fails', async () => {
+        mockContentItemsRepo.findOne.mockResolvedValue(storedVideo());
+        mockCloudinaryService.getAssetDetails.mockResolvedValue(videoAsset);
+        mockContentItemsRepo.save.mockRejectedValue(new Error('db down'));
+
+        await expect(
+          service.update('ci-1', { mediaPublicId: videoId }),
+        ).rejects.toThrow('db down');
+        expect(mockCloudinaryService.deleteFile).not.toHaveBeenCalled();
+      });
+
+      it('should log and not fail when deleting the old file fails', async () => {
+        const logError = vi
+          .spyOn(Logger.prototype, 'error')
+          .mockImplementation(() => undefined);
+        mockContentItemsRepo.findOne.mockResolvedValue(storedVideo());
+        mockCloudinaryService.getAssetDetails.mockResolvedValue(videoAsset);
+        mockCloudinaryService.deleteFile.mockRejectedValue(
+          new Error('Cloudinary down'),
+        );
+
+        await expect(
+          service.update('ci-1', { mediaPublicId: videoId }),
+        ).resolves.toBeUndefined();
+        expect(logError).toHaveBeenCalled();
+
+        logError.mockRestore();
+      });
+    });
+  });
 
   describe('getContent', () => {
     const publishedLesson = {
