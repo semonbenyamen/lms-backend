@@ -16,6 +16,7 @@ import { CoursesModule } from './courses/courses.module.js';
 import { SectionsModule } from './sections/sections.module.js';
 import { CategoriesModule } from './categories/categories.module.js';
 import { LessonsModule } from './lessons/lessons.module.js';
+import { ContentsModule } from './contents/contents.module.js';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { LessonsModule } from './lessons/lessons.module.js';
     SectionsModule,
     CategoriesModule,
     LessonsModule,
+    ContentsModule,
   ],
 
   controllers: [AppController],

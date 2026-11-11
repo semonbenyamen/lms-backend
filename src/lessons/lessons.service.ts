@@ -4,11 +4,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { canReadCourse } from '../common/authorization/authorization.util.js';
 import { isUniqueViolation } from '../common/database/is-unique-violation.js';
+import { ContentItem } from '../contents/entities/content-item.entity.js';
 import { SectionsService } from '../sections/sections.service.js';
 import { CreateLessonDto } from './dto/create-lesson.dto.js';
 import { UpdateLessonDto } from './dto/update-lesson.dto.js';
@@ -39,9 +40,14 @@ export class LessonsService {
     lessonId: string,
     user: Pick<JwtPayload, 'sub' | 'role'>,
   ): Promise<LessonResponseDto> {
-    const lesson = await this.findLessonWithCourse(lessonId);
+    // Only the lesson details load its content items.
+    const lesson = await this.lessonsRepository.findOne({
+      where: { id: lessonId },
+      relations: { section: { course: true }, contentItems: true },
+      order: { contentItems: { orderIndex: 'ASC' } },
+    });
 
-    if (!canReadCourse(lesson.section.course, user)) {
+    if (!lesson || !canReadCourse(lesson.section.course, user)) {
       throw new NotFoundException(`Lesson with ID ${lessonId} not found`);
     }
 
@@ -82,7 +88,11 @@ export class LessonsService {
   async remove(lessonId: string): Promise<void> {
     const lesson = await this.findLessonWithCourse(lessonId);
 
-    await this.lessonsRepository.softRemove(lesson);
+    // Soft delete the lesson and its content together, like a section delete.
+    await this.lessonsRepository.manager.transaction(async (manager) => {
+      await manager.softDelete(ContentItem, { lessonId, deletedAt: IsNull() });
+      await manager.softRemove(Lesson, lesson);
+    });
   }
 
   // --- Helper Methods ---
@@ -101,7 +111,8 @@ export class LessonsService {
     }
   }
 
-  private async findLessonWithCourse(lessonId: string): Promise<Lesson> {
+  // Used by ContentsService and ContentOwnershipGuard to reach the course.
+  async findLessonWithCourse(lessonId: string): Promise<Lesson> {
     const lesson = await this.lessonsRepository.findOne({
       where: { id: lessonId },
       relations: { section: { course: true } },

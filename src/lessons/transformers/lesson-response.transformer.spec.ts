@@ -32,5 +32,24 @@ describe('toLessonResponseDto', () => {
 
     expect(result).not.toHaveProperty('section');
     expect(result).not.toHaveProperty('deletedAt');
+    expect(result).not.toHaveProperty('contentItems');
+  });
+
+  it('should return the loaded content items without their relations', () => {
+    const lesson = {
+      id: 'lesson-1',
+      contentItems: [
+        { id: 'ci-1', lessonId: 'lesson-1', lesson: { id: 'lesson-1' } },
+      ],
+    } as unknown as Lesson;
+
+    const { contentItems } = toLessonResponseDto(lesson);
+
+    expect(contentItems).toHaveLength(1);
+    expect(contentItems?.[0]).toMatchObject({
+      id: 'ci-1',
+      lessonId: 'lesson-1',
+    });
+    expect(contentItems?.[0]).not.toHaveProperty('lesson');
   });
 });

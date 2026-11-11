@@ -6,12 +6,14 @@ import {
   Index,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import type { Relation } from 'typeorm';
 
 import { Section } from '../../sections/entities/section.entity.js';
+import { ContentItem } from '../../contents/entities/content-item.entity.js';
 
 @Entity('lessons')
 // Unique among non-deleted lessons, so a deleted lesson frees its order.
@@ -38,6 +40,9 @@ export class Lesson {
 
   @Column({ name: 'order_index', type: 'int' })
   orderIndex: number;
+
+  @OneToMany(() => ContentItem, (contentItem) => contentItem.lesson)
+  contentItems: Relation<ContentItem>[];
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

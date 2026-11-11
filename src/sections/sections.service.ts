@@ -4,13 +4,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import type { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { canReadCourse } from '../common/authorization/authorization.util.js';
 import { isUniqueViolation } from '../common/database/is-unique-violation.js';
 import { CoursesService } from '../courses/courses.service.js';
-import { Lesson } from '../lessons/entities/lesson.entity.js';
+import { softDeleteSectionLessons } from '../lessons/soft-delete-section-lessons.js';
 import { CreateSectionDto } from './dto/create-section.dto.js';
 import { SectionResponseDto } from './dto/section-response.dto.js';
 import { UpdateSectionDto } from './dto/update-section.dto.js';
@@ -96,9 +96,9 @@ export class SectionsService {
   async remove(id: string): Promise<void> {
     const section = await this.findSectionWithCourse(id);
 
-    // Soft delete the section and its lessons together, like a course delete.
+    // Soft delete the section with its lessons and content, like a course delete.
     await this.sectionsRepository.manager.transaction(async (manager) => {
-      await manager.softDelete(Lesson, { sectionId: id, deletedAt: IsNull() });
+      await softDeleteSectionLessons(manager, [id]);
       await manager.softRemove(Section, section);
     });
   }

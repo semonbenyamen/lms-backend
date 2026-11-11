@@ -39,7 +39,7 @@ export const ApiListLessons = () =>
 
 export const ApiGetLesson = () =>
   applyDecorators(
-    ApiOperation({ summary: 'Get lesson details by ID' }),
+    ApiOperation({ summary: 'Get lesson details by ID with content items' }),
     ApiSuccessResponse(LessonResponseDto, HttpStatus.OK),
     ApiAuthErrorResponses({
       [HttpStatus.BAD_REQUEST]: 'Invalid UUID format',
