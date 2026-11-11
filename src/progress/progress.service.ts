@@ -20,6 +20,7 @@ import { UpdateContentProgressDto } from './dto/update-content-progress.dto.js';
 import { ContentProgressHistory } from './entities/content-progress-history.entity.js';
 import { ContentProgress } from './entities/content-progress.entity.js';
 import { toContentProgressResponseDto } from './transformers/content-progress-response.transformer.js';
+import { CourseProgressService } from './course-progress.service.js';
 
 @Injectable()
 export class ProgressService {
@@ -30,6 +31,7 @@ export class ProgressService {
     private readonly enrollmentsService: EnrollmentsService,
     private readonly coursesService: CoursesService,
     private readonly dataSource: DataSource,
+    private readonly courseProgressService: CourseProgressService,
   ) {}
 
   // Missing or deleted content is a 404, existing content without an
@@ -131,6 +133,7 @@ export class ProgressService {
   private async saveProgressWithHistory(
     enrollmentId: string,
     contentId: string,
+    courseId: string,
     dto: UpdateContentProgressDto,
   ): Promise<ContentProgress> {
     return this.dataSource.transaction(async (manager) => {
@@ -175,6 +178,13 @@ export class ProgressService {
         lastPositionSeconds: dto.lastPositionSeconds ?? null,
       });
 
+      // Refresh summary using the same transaction manager.
+      await this.courseProgressService.refreshEnrollment(
+        enrollmentId,
+        courseId,
+        manager,
+      );
+
       return progressRepository.findOneOrFail({
         where: {
           enrollmentId,
@@ -203,6 +213,7 @@ export class ProgressService {
     const progress = await this.saveProgressWithHistory(
       enrollment.id,
       contentId,
+      enrollment.courseId,
       dto,
     );
 

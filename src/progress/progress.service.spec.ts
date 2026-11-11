@@ -13,6 +13,7 @@ import { CoursesService } from '../courses/courses.service.js';
 import { ContentProgress } from './entities/content-progress.entity.js';
 import { ContentProgressHistory } from './entities/content-progress-history.entity.js';
 import { ProgressService } from './progress.service.js';
+import { CourseProgressService } from './course-progress.service.js';
 
 describe('ProgressService', () => {
   const studentId = 'student-id';
@@ -65,6 +66,10 @@ describe('ProgressService', () => {
     transaction: vi.fn(),
   };
 
+  const courseProgress = {
+    refreshEnrollment: vi.fn(),
+  };
+
   let service: ProgressService;
 
   beforeEach(() => {
@@ -90,6 +95,7 @@ describe('ProgressService', () => {
     });
     progress.upsert.mockResolvedValue(undefined);
     history.insert.mockResolvedValue(undefined);
+    courseProgress.refreshEnrollment.mockResolvedValue(undefined);
 
     manager.getRepository.mockImplementation((entity) => {
       if (entity === ContentProgress) return progress;
@@ -107,6 +113,7 @@ describe('ProgressService', () => {
       enrollmentsService as unknown as EnrollmentsService,
       coursesService as unknown as CoursesService,
       dataSource as unknown as DataSource,
+      courseProgress as unknown as CourseProgressService,
     );
   });
 
@@ -181,6 +188,12 @@ describe('ProgressService', () => {
         isCompleted: false,
       }),
     );
+
+    expect(courseProgress.refreshEnrollment).toHaveBeenCalledWith(
+      enrollment.id,
+      courseId,
+      manager,
+    );
   });
 
   it('appends a history record for every progress update', async () => {
@@ -203,6 +216,7 @@ describe('ProgressService', () => {
       2,
       expect.objectContaining({ lastPositionSeconds: 40 }),
     );
+    expect(courseProgress.refreshEnrollment).toHaveBeenCalledTimes(2);
   });
 
   it('rejects video position beyond duration', async () => {
@@ -270,6 +284,7 @@ describe('ProgressService', () => {
 
     expect(progress.upsert).toHaveBeenCalledOnce();
     expect(history.insert).toHaveBeenCalledOnce();
+    expect(courseProgress.refreshEnrollment).not.toHaveBeenCalled();
   });
 
   it('returns 404 for missing or deleted content', async () => {
