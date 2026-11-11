@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { canReadCourse } from '../common/authorization/authorization.util.js';
@@ -199,6 +199,18 @@ export class ContentsService {
   // Deleted content is skipped, so it does not exist for progress either.
   async contentExists(id: string): Promise<boolean> {
     return this.contentItemsRepository.exists({ where: { id } });
+  }
+
+  // The live content of a course with its lesson, for the course progress.
+  // Deleting a section or lesson also deletes its content, so no join is needed.
+  async findCourseContentLessons(
+    courseId: string,
+    manager?: EntityManager,
+  ): Promise<Pick<ContentItem, 'id' | 'lessonId'>[]> {
+    return (manager ?? this.contentItemsRepository.manager).find(ContentItem, {
+      select: { id: true, lessonId: true },
+      where: { courseId },
+    });
   }
 
   async findProgressContentReference(

@@ -132,7 +132,6 @@ export class ProgressService {
   private async saveProgressWithHistory(
     enrollmentId: string,
     contentId: string,
-    courseId: string,
     dto: UpdateContentProgressDto,
   ): Promise<ContentProgress> {
     return this.dataSource.transaction(async (manager) => {
@@ -141,7 +140,14 @@ export class ProgressService {
 
       // Updates of one student run one after another, so two parallel
       // requests cannot both read the old row and save a lower position.
-      await this.enrollmentsService.lockEnrollment(enrollmentId, manager);
+      const enrollment = await this.enrollmentsService.lockEnrollment(
+        enrollmentId,
+        manager,
+      );
+
+      if (!enrollment || enrollment.cancelledAt) {
+        throw new ForbiddenException('Student is not enrolled in this course');
+      }
 
       const current = await progressRepository.findOne({
         where: {
@@ -177,12 +183,8 @@ export class ProgressService {
         lastPositionSeconds: dto.lastPositionSeconds ?? null,
       });
 
-      // Refresh summary using the same transaction manager.
-      await this.courseProgressService.refreshEnrollment(
-        enrollmentId,
-        courseId,
-        manager,
-      );
+      // Refresh the enrollment totals in the same transaction.
+      await this.courseProgressService.refreshEnrollment(enrollment, manager);
 
       return progressRepository.findOneOrFail({
         where: {
@@ -212,7 +214,6 @@ export class ProgressService {
     const progress = await this.saveProgressWithHistory(
       enrollment.id,
       contentId,
-      enrollment.courseId,
       dto,
     );
 

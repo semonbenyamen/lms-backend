@@ -1,13 +1,14 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Repository } from 'typeorm';
+import type { EntityManager, Repository } from 'typeorm';
 
 import { EnrollmentStatus } from '../common/enums/enrollment-status.enum.js';
-import { ContentItem } from '../contents/entities/content-item.entity.js';
-import { Course } from '../courses/entities/course.entity.js';
-import { Enrollment } from '../enrollments/entities/enrollment.entity.js';
-import { ContentProgress } from './entities/content-progress.entity.js';
+import { ContentsService } from '../contents/contents.service.js';
+import { CoursesService } from '../courses/courses.service.js';
+import { EnrollmentsService } from '../enrollments/enrollments.service.js';
+import type { Enrollment } from '../enrollments/entities/enrollment.entity.js';
 import { CourseProgressService } from './course-progress.service.js';
+import { ContentProgress } from './entities/content-progress.entity.js';
 
 describe('CourseProgressService', () => {
   const courseId = 'course-1';
@@ -18,180 +19,206 @@ describe('CourseProgressService', () => {
     courseId,
     cancelledAt: null,
     completedAt: null,
-  };
-  const content = (id: string, lessonId: string) => ({
-  id,
-  lessonId,
-  courseId,
-  deletedAt: null,
-  lesson: { deletedAt: null, section: { deletedAt: null } },
-});
-  const courses = { findOne: vi.fn() };
-  const enrollments = { findOne: vi.fn(), update: vi.fn() };
-  const contents = { find: vi.fn() };
+    course: { id: courseId, isPublished: true },
+  } as unknown as Enrollment;
+  const content = (id: string, lessonId: string) => ({ id, lessonId });
+
   const progress = { find: vi.fn() };
+  const contentsService = { findCourseContentLessons: vi.fn() };
+  const coursesService = { findById: vi.fn() };
+  const enrollmentsService = {
+    findActiveEnrollment: vi.fn(),
+    updateProgressSummary: vi.fn(),
+  };
+  const manager = {
+    getRepository: vi.fn(() => progress),
+  } as unknown as EntityManager;
   let service: CourseProgressService;
 
   beforeEach(() => {
-    vi.resetAllMocks();
-    courses.findOne.mockResolvedValue({ id: courseId, isPublished: true });
-    enrollments.findOne.mockResolvedValue(enrollment);
-    contents.find.mockResolvedValue([
+    vi.clearAllMocks();
+    enrollmentsService.findActiveEnrollment.mockResolvedValue(enrollment);
+    contentsService.findCourseContentLessons.mockResolvedValue([
       content('a', 'lesson-1'),
       content('b', 'lesson-1'),
       content('c', 'lesson-2'),
     ]);
-    progress.find.mockResolvedValue([{ contentItemId: 'a' }, { contentItemId: 'b' }]);
+    progress.find.mockResolvedValue([
+      { contentItemId: 'a' },
+      { contentItemId: 'b' },
+    ]);
     service = new CourseProgressService(
-      courses as unknown as Repository<Course>,
-      enrollments as unknown as Repository<Enrollment>,
-      contents as unknown as Repository<ContentItem>,
       progress as unknown as Repository<ContentProgress>,
+      contentsService as unknown as ContentsService,
+      coursesService as unknown as CoursesService,
+      enrollmentsService as unknown as EnrollmentsService,
     );
   });
 
-  it('calculates percentage and counts completed lessons', async () => {
-    await expect(service.getCourseProgress(studentId, courseId)).resolves.toEqual({
-      courseId,
-      enrollmentId: enrollment.id,
-      totalLessons: 2,
-      lessonsCompleted: 1,
-      totalContents: 3,
-      completedContents: 2,
-      completionPercentage: 66.67,
-      isCompleted: false,
+  describe('getCourseProgress', () => {
+    it('calculates percentage and counts completed lessons', async () => {
+      await expect(
+        service.getCourseProgress(studentId, courseId),
+      ).resolves.toEqual({
+        courseId,
+        totalLessons: 2,
+        lessonsCompleted: 1,
+        totalContents: 3,
+        completedContents: 2,
+        completionPercentage: 66.67,
+        isCompleted: false,
+      });
+    });
+
+    it('reads the live content of the course and only its completed items', async () => {
+      await service.getCourseProgress(studentId, courseId);
+
+      expect(contentsService.findCourseContentLessons).toHaveBeenCalledWith(
+        courseId,
+        undefined,
+      );
+      expect(progress.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            enrollmentId: enrollment.id,
+            isCompleted: true,
+          }),
+        }),
+      );
+    });
+
+    it('does not complete an empty course', async () => {
+      contentsService.findCourseContentLessons.mockResolvedValue([]);
+
+      const result = await service.getCourseProgress(studentId, courseId);
+
+      expect(result.completionPercentage).toBe(0);
+      expect(result.isCompleted).toBe(false);
+      expect(progress.find).not.toHaveBeenCalled();
+    });
+
+    it('rejects a student who is not enrolled in a published course', async () => {
+      enrollmentsService.findActiveEnrollment.mockResolvedValue(null);
+      coursesService.findById.mockResolvedValue({
+        id: courseId,
+        isPublished: true,
+      });
+
+      await expect(
+        service.getCourseProgress(studentId, courseId),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('hides an unpublished course from a student who is not enrolled', async () => {
+      enrollmentsService.findActiveEnrollment.mockResolvedValue(null);
+      coursesService.findById.mockResolvedValue({
+        id: courseId,
+        isPublished: false,
+      });
+
+      await expect(
+        service.getCourseProgress(studentId, courseId),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('hides an unpublished course from an enrolled student without another query', async () => {
+      enrollmentsService.findActiveEnrollment.mockResolvedValue({
+        ...enrollment,
+        course: { id: courseId, isPublished: false },
+      });
+
+      await expect(
+        service.getCourseProgress(studentId, courseId),
+      ).rejects.toThrow(NotFoundException);
+      expect(coursesService.findById).not.toHaveBeenCalled();
+      expect(contentsService.findCourseContentLessons).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 for a missing course', async () => {
+      enrollmentsService.findActiveEnrollment.mockResolvedValue(null);
+      coursesService.findById.mockRejectedValue(new NotFoundException());
+
+      await expect(
+        service.getCourseProgress(studentId, courseId),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
-  it('does not include soft-deleted content or lessons', async () => {
-    contents.find.mockResolvedValue([
-      content('a', 'lesson-1'),
-      { ...content('b', 'lesson-1'), deletedAt: new Date() },
-      { ...content('c', 'lesson-2'), lesson: { deletedAt: new Date(), section: { deletedAt: null } } },
-    ]);
-    progress.find.mockResolvedValue([{ contentItemId: 'a' }]);
-    const result = await service.getCourseProgress(studentId, courseId);
-    expect(result.totalContents).toBe(1);
-    expect(result.lessonsCompleted).toBe(1);
-    expect(result.isCompleted).toBe(true);
+  describe('refreshEnrollment', () => {
+    it('updates the enrollment with in-progress totals', async () => {
+      await service.refreshEnrollment(enrollment, manager);
+
+      expect(contentsService.findCourseContentLessons).toHaveBeenCalledWith(
+        courseId,
+        manager,
+      );
+      expect(enrollmentsService.updateProgressSummary).toHaveBeenCalledWith(
+        enrollment.id,
+        expect.objectContaining({
+          completionPercentage: 66.67,
+          lessonsCompleted: 1,
+          status: EnrollmentStatus.IN_PROGRESS,
+          lastActivityAt: expect.any(Date),
+          completedAt: null,
+        }),
+        manager,
+      );
+    });
+
+    it('marks a fully completed course as completed', async () => {
+      progress.find.mockResolvedValue([
+        { contentItemId: 'a' },
+        { contentItemId: 'b' },
+        { contentItemId: 'c' },
+      ]);
+
+      await service.refreshEnrollment(enrollment, manager);
+
+      expect(enrollmentsService.updateProgressSummary).toHaveBeenCalledWith(
+        enrollment.id,
+        expect.objectContaining({
+          completionPercentage: 100,
+          lessonsCompleted: 2,
+          status: EnrollmentStatus.COMPLETED,
+          completedAt: expect.any(Date),
+        }),
+        manager,
+      );
+    });
+
+    it('keeps the original completion date on subsequent updates', async () => {
+      const completedAt = new Date('2026-01-01');
+      progress.find.mockResolvedValue([
+        { contentItemId: 'a' },
+        { contentItemId: 'b' },
+        { contentItemId: 'c' },
+      ]);
+
+      await service.refreshEnrollment(
+        { ...enrollment, completedAt } as Enrollment,
+        manager,
+      );
+
+      expect(enrollmentsService.updateProgressSummary).toHaveBeenCalledWith(
+        enrollment.id,
+        expect.objectContaining({ completedAt }),
+        manager,
+      );
+    });
+
+    it('keeps a course with no completed content as not started', async () => {
+      progress.find.mockResolvedValue([]);
+
+      await service.refreshEnrollment(enrollment, manager);
+
+      expect(enrollmentsService.updateProgressSummary).toHaveBeenCalledWith(
+        enrollment.id,
+        expect.objectContaining({
+          completionPercentage: 0,
+          status: EnrollmentStatus.NOT_STARTED,
+        }),
+        manager,
+      );
+    });
   });
-
-  it('does not complete an empty course', async () => {
-    contents.find.mockResolvedValue([]);
-    const result = await service.getCourseProgress(studentId, courseId);
-    expect(result.completionPercentage).toBe(0);
-    expect(result.isCompleted).toBe(false);
-    expect(progress.find).not.toHaveBeenCalled();
-  });
-
-  it('rejects a student who is not enrolled', async () => {
-    enrollments.findOne.mockResolvedValue(null);
-    await expect(service.getCourseProgress(studentId, courseId)).rejects.toThrow(ForbiddenException);
-  });
-
-  it('rejects a cancelled enrollment', async () => {
-    enrollments.findOne.mockResolvedValue({ ...enrollment, cancelledAt: new Date() });
-    await expect(service.getCourseProgress(studentId, courseId)).rejects.toThrow(ForbiddenException);
-  });
-
-  it('hides an unpublished course', async () => {
-    courses.findOne.mockResolvedValue(null);
-    await expect(service.getCourseProgress(studentId, courseId)).rejects.toThrow(NotFoundException);
-  });
-
-  it('updates the enrollment with in-progress totals', async () => {
-    await service.refreshEnrollment(enrollment.id, courseId);
-    expect(enrollments.update).toHaveBeenCalledWith(
-      { id: enrollment.id },
-      expect.objectContaining({
-        completionPercentage: 66.67,
-        lessonsCompleted: 1,
-        status: EnrollmentStatus.IN_PROGRESS,
-        completedAt: null,
-      }),
-    );
-  });
-
-  it('marks a fully completed course as completed', async () => {
-    progress.find.mockResolvedValue([
-      { contentItemId: 'a' }, { contentItemId: 'b' }, { contentItemId: 'c' },
-    ]);
-    await service.refreshEnrollment(enrollment.id, courseId);
-    expect(enrollments.update).toHaveBeenCalledWith(
-      { id: enrollment.id },
-      expect.objectContaining({
-        completionPercentage: 100,
-        lessonsCompleted: 2,
-        status: EnrollmentStatus.COMPLETED,
-        completedAt: expect.any(Date),
-      }),
-    );
-  });
-
-  it('keeps the original completion date on subsequent updates', async () => {
-    const completedAt = new Date('2026-01-01');
-    enrollments.findOne.mockResolvedValue({ ...enrollment, completedAt });
-    progress.find.mockResolvedValue([
-      { contentItemId: 'a' }, { contentItemId: 'b' }, { contentItemId: 'c' },
-    ]);
-    await service.refreshEnrollment(enrollment.id, courseId);
-    expect(enrollments.update).toHaveBeenCalledWith(
-      { id: enrollment.id },
-      expect.objectContaining({ completedAt }),
-    );
-  });
-
-
-it('queries content using the direct courseId relation', async () => {
-  await service.getCourseProgress(studentId, courseId);
-
-  expect(contents.find).toHaveBeenCalledWith({
-    where: { courseId },
-    relations: { lesson: { section: true } },
-  });
-});
-
-it('excludes content belonging to a soft-deleted section', async () => {
-  contents.find.mockResolvedValue([
-    content('a', 'lesson-1'),
-    {
-      ...content('b', 'lesson-2'),
-      lesson: {
-        deletedAt: null,
-        section: { deletedAt: new Date() },
-      },
-    },
-  ]);
-
-  progress.find.mockResolvedValue([{ contentItemId: 'a' }]);
-
-  const result = await service.getCourseProgress(studentId, courseId);
-
-  expect(result.totalContents).toBe(1);
-  expect(result.completedContents).toBe(1);
-  expect(result.totalLessons).toBe(1);
-  expect(result.completionPercentage).toBe(100);
-});
-
-it('does not refresh a cancelled enrollment', async () => {
-  enrollments.findOne.mockResolvedValue({
-    ...enrollment,
-    cancelledAt: new Date(),
-  });
-
-  await service.refreshEnrollment(enrollment.id, courseId);
-
-  expect(contents.find).not.toHaveBeenCalled();
-  expect(enrollments.update).not.toHaveBeenCalled();
-});
-
-it('does not refresh an enrollment that does not exist', async () => {
-  enrollments.findOne.mockResolvedValue(null);
-
-  await service.refreshEnrollment(enrollment.id, courseId);
-
-  expect(contents.find).not.toHaveBeenCalled();
-  expect(enrollments.update).not.toHaveBeenCalled();
-});
-
 });

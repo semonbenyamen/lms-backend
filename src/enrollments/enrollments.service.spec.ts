@@ -61,16 +61,53 @@ describe('EnrollmentsService', () => {
   });
 
   it('should lock the enrollment inside the given transaction', async () => {
-    const manager = { findOne: vi.fn() };
+    const manager = { findOne: vi.fn().mockResolvedValue(existingEnrollment) };
 
-    await service.lockEnrollment(
-      'enrollment-1',
-      manager as unknown as EntityManager,
-    );
+    await expect(
+      service.lockEnrollment(
+        'enrollment-1',
+        manager as unknown as EntityManager,
+      ),
+    ).resolves.toBe(existingEnrollment);
 
     expect(manager.findOne).toHaveBeenCalledWith(Enrollment, {
       where: { id: 'enrollment-1' },
       lock: { mode: 'pessimistic_write' },
+    });
+  });
+
+  it('should save the progress totals inside the given transaction', async () => {
+    const manager = { update: vi.fn() };
+    const summary = {
+      completionPercentage: 50,
+      lessonsCompleted: 1,
+      status: EnrollmentStatus.IN_PROGRESS,
+      lastActivityAt: new Date('2026-11-01T10:00:00.000Z'),
+      completedAt: null,
+    };
+
+    await service.updateProgressSummary(
+      'enrollment-1',
+      summary,
+      manager as unknown as EntityManager,
+    );
+
+    expect(manager.update).toHaveBeenCalledWith(
+      Enrollment,
+      { id: 'enrollment-1' },
+      summary,
+    );
+  });
+
+  it('should find the active enrollment in a course with the course', async () => {
+    enrollmentsRepository.findOne.mockResolvedValue(existingEnrollment);
+
+    await expect(
+      service.findActiveEnrollment(studentId, courseId),
+    ).resolves.toBe(existingEnrollment);
+    expect(enrollmentsRepository.findOne).toHaveBeenCalledWith({
+      where: { studentId, courseId, cancelledAt: IsNull() },
+      relations: { course: true },
     });
   });
 

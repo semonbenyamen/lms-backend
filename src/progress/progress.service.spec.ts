@@ -91,6 +91,7 @@ describe('ProgressService', () => {
     });
     progress.upsert.mockResolvedValue(undefined);
     history.insert.mockResolvedValue(undefined);
+    enrollmentsService.lockEnrollment.mockResolvedValue(enrollment);
     courseProgress.refreshEnrollment.mockResolvedValue(undefined);
 
     manager.getRepository.mockImplementation((entity) => {
@@ -185,8 +186,7 @@ describe('ProgressService', () => {
     );
 
     expect(courseProgress.refreshEnrollment).toHaveBeenCalledWith(
-      enrollment.id,
-      courseId,
+      enrollment,
       manager,
     );
   });
@@ -311,6 +311,19 @@ describe('ProgressService', () => {
     expect(
       enrollmentsService.lockEnrollment.mock.invocationCallOrder[0],
     ).toBeLessThan(progress.findOne.mock.invocationCallOrder[0]);
+  });
+
+  it('rejects an update when the locked enrollment is gone', async () => {
+    enrollmentsService.lockEnrollment.mockResolvedValue(null);
+
+    await expect(
+      service.updateStudentContentProgress(studentId, contentId, {
+        isCompleted: true,
+      }),
+    ).rejects.toThrow(ForbiddenException);
+
+    expect(progress.upsert).not.toHaveBeenCalled();
+    expect(courseProgress.refreshEnrollment).not.toHaveBeenCalled();
   });
 
   it('does not read progress when enrollment is missing', async () => {

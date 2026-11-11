@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { QueryFailedError } from 'typeorm';
+import { EntityManager, QueryFailedError } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
@@ -33,6 +33,7 @@ describe('ContentsService', () => {
     find: vi.fn(),
     exists: vi.fn(),
     softRemove: vi.fn(),
+    manager: { find: vi.fn() },
   };
 
   const mockLessonsService = {
@@ -703,6 +704,33 @@ describe('ContentsService', () => {
         NotFoundException,
       );
       expect(mockContentItemsRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findCourseContentLessons', () => {
+    const items = [{ id: 'ci-1', lessonId: 'l-1' }];
+
+    it('should read the live content of the course in one query', async () => {
+      const manager = { find: vi.fn().mockResolvedValue(items) };
+
+      await expect(
+        service.findCourseContentLessons(
+          'c-1',
+          manager as unknown as EntityManager,
+        ),
+      ).resolves.toBe(items);
+      expect(manager.find).toHaveBeenCalledWith(ContentItem, {
+        select: { id: true, lessonId: true },
+        where: { courseId: 'c-1' },
+      });
+    });
+
+    it('should use the repository manager outside a transaction', async () => {
+      mockContentItemsRepo.manager.find.mockResolvedValue(items);
+
+      await expect(service.findCourseContentLessons('c-1')).resolves.toBe(
+        items,
+      );
     });
   });
 
