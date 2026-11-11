@@ -1,5 +1,5 @@
-
 import {
+  Check,
   Column,
   CreateDateColumn,
   Entity,
@@ -10,13 +10,29 @@ import {
   Unique,
   UpdateDateColumn,
 } from 'typeorm';
+import type { Relation } from 'typeorm';
 
+import { Course } from '../../courses/entities/course.entity.js';
 import { User } from '../../users/entities/user.entity.js';
 import { EnrollmentStatus } from '../../common/enums/enrollment-status.enum.js';
 
 @Entity('enrollments')
 @Unique('UQ_enrollments_student_course', ['studentId', 'courseId'])
 @Index('IDX_enrollments_course_id', ['courseId'])
+@Check(
+  'CHK_enrollments_completion_percentage',
+  '"completion_percentage" BETWEEN 0 AND 100',
+)
+@Check('CHK_enrollments_lessons_completed', '"lessons_completed" >= 0')
+@Check(
+  'CHK_enrollments_cancelled_at',
+  '"cancelled_at" IS NULL OR "cancelled_at" >= "enrolled_at"',
+)
+// A completed enrollment has a completion date, any other status has none.
+@Check(
+  'CHK_enrollments_completed_at',
+  `("status" = 'completed' AND "completed_at" IS NOT NULL AND "completed_at" >= "enrolled_at") OR ("status" <> 'completed' AND "completed_at" IS NULL)`,
+)
 export class Enrollment {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -26,12 +42,22 @@ export class Enrollment {
 
   // Link each enrollment to an existing user.
   @ManyToOne(() => User, { nullable: false, onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'student_id' })
+  // Same FK names as the migration, so migration:generate finds no difference.
+  @JoinColumn({
+    name: 'student_id',
+    foreignKeyConstraintName: 'FK_enrollments_student_id',
+  })
   student: User;
 
-  // Course relation will be added when the Course entity is available.
   @Column({ name: 'course_id', type: 'uuid' })
   courseId: string;
+
+  @ManyToOne(() => Course, { nullable: false, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'course_id',
+    foreignKeyConstraintName: 'FK_enrollments_course_id',
+  })
+  course: Relation<Course>;
 
   @Column({
     type: 'enum',
@@ -46,6 +72,11 @@ export class Enrollment {
     precision: 5,
     scale: 2,
     default: 0,
+    // Postgres returns numeric as a string, so it is read back as a number.
+    transformer: {
+      to: (value: number) => value,
+      from: (value: string) => Number(value),
+    },
   })
   completionPercentage: number;
 
