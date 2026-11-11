@@ -20,6 +20,7 @@ describe('CoursesController', () => {
     getCourse: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
+    createThumbnailSignature: vi.fn(),
   };
 
   const mockInstructorReq: AuthenticatedRequest = {
@@ -145,5 +146,18 @@ describe('CoursesController', () => {
     await controller.remove('c-1');
 
     expect(mockCoursesService.remove).toHaveBeenCalledWith('c-1');
+  });
+
+  it('should return the thumbnail signature for the course', () => {
+    const signature = {
+      publicId: 'lms/courses/c-1/thumbnail/x',
+      signature: 'a',
+    };
+    mockCoursesService.createThumbnailSignature.mockReturnValue(signature);
+
+    expect(controller.createThumbnailSignature('c-1')).toBe(signature);
+    expect(mockCoursesService.createThumbnailSignature).toHaveBeenCalledWith(
+      'c-1',
+    );
   });
 });

@@ -98,10 +98,43 @@ describe('Course DTO Validation', () => {
     ).resolves.toMatchObject({ prerequisites: null, estimatedDuration: null });
   });
 
-  it('should reject a thumbnail url until uploads are added', async () => {
+  // The url comes from the uploaded image, never from the client.
+  it('should reject a thumbnail url', async () => {
     await expect(
       validationPipe.transform(
         { ...validCourse, thumbnailUrl: 'https://example.com/a.png' },
+        { type: 'body', metatype: CreateCourseDto },
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('should accept a thumbnail public id or null on update', async () => {
+    await expect(
+      validationPipe.transform(
+        { thumbnailPublicId: 'lms/courses/c-1/thumbnail/x' },
+        { type: 'body', metatype: UpdateCourseDto },
+      ),
+    ).resolves.toMatchObject({
+      thumbnailPublicId: 'lms/courses/c-1/thumbnail/x',
+    });
+    await expect(
+      validationPipe.transform(
+        { thumbnailPublicId: null },
+        { type: 'body', metatype: UpdateCourseDto },
+      ),
+    ).resolves.toMatchObject({ thumbnailPublicId: null });
+  });
+
+  it('should reject an empty thumbnail public id or one on create', async () => {
+    await expect(
+      validationPipe.transform(
+        { thumbnailPublicId: '' },
+        { type: 'body', metatype: UpdateCourseDto },
+      ),
+    ).rejects.toThrow(BadRequestException);
+    await expect(
+      validationPipe.transform(
+        { ...validCourse, thumbnailPublicId: 'lms/courses/c-1/thumbnail/x' },
         { type: 'body', metatype: CreateCourseDto },
       ),
     ).rejects.toThrow(BadRequestException);

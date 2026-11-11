@@ -6,12 +6,22 @@ import { RefreshToken } from '../auth/entities/refresh-token.entity.js';
 import { Course } from '../courses/entities/course.entity.js';
 import { Section } from '../sections/entities/section.entity.js';
 import { Category } from '../categories/entities/category.entity.js';
+import { Lesson } from '../lessons/entities/lesson.entity.js';
+import { ContentItem } from '../contents/entities/content-item.entity.js';
 
 export const AppDataSource = new DataSource({
   type: 'postgres',
   url: process.env.DATABASE_URL,
 
-  entities: [User, AuthToken, RefreshToken, Course, Category, Section],
+  entities: [
+    User,
+    AuthToken,
+    RefreshToken,
+    Course,
+    Category, Section,
+    Lesson,
+    ContentItem,
+  ],
 
   migrations: ['src/database/migrations/*.ts'],
 

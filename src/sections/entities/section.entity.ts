@@ -6,12 +6,14 @@ import {
   Index,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import type { Relation } from 'typeorm';
 
 import { Course } from '../../courses/entities/course.entity.js';
+import { Lesson } from '../../lessons/entities/lesson.entity.js';
 
 @Entity('sections')
 // Unique among non-deleted sections, so a deleted section frees its order.
@@ -36,6 +38,9 @@ export class Section {
 
   @Column({ name: 'order_index', type: 'int' })
   orderIndex: number;
+
+  @OneToMany(() => Lesson, (lesson) => lesson.section)
+  lessons: Relation<Lesson>[];
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

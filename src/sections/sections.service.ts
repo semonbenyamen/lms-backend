@@ -10,6 +10,7 @@ import type { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { canReadCourse } from '../common/authorization/authorization.util.js';
 import { isUniqueViolation } from '../common/database/is-unique-violation.js';
 import { CoursesService } from '../courses/courses.service.js';
+import { softDeleteSectionLessons } from '../lessons/soft-delete-section-lessons.js';
 import { CreateSectionDto } from './dto/create-section.dto.js';
 import { SectionResponseDto } from './dto/section-response.dto.js';
 import { UpdateSectionDto } from './dto/update-section.dto.js';
@@ -95,7 +96,11 @@ export class SectionsService {
   async remove(id: string): Promise<void> {
     const section = await this.findSectionWithCourse(id);
 
-    await this.sectionsRepository.softRemove(section);
+    // Soft delete the section with its lessons and content, like a course delete.
+    await this.sectionsRepository.manager.transaction(async (manager) => {
+      await softDeleteSectionLessons(manager, [id]);
+      await manager.softRemove(Section, section);
+    });
   }
 
   // order_index is unique per course, so a clash is a 409, not a 500.
@@ -113,7 +118,8 @@ export class SectionsService {
     }
   }
 
-  private async findSectionWithCourse(id: string): Promise<Section> {
+  // Used by LessonsService to verify the parent section and course.
+  async findSectionWithCourse(id: string): Promise<Section> {
     const section = await this.sectionsRepository.findOne({
       where: { id },
       relations: {

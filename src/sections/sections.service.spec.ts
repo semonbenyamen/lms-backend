@@ -7,8 +7,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { CoursesService } from '../courses/courses.service.js';
+import { softDeleteSectionLessons } from '../lessons/soft-delete-section-lessons.js';
 import { Section } from './entities/section.entity.js';
 import { SectionsService } from './sections.service.js';
+
+// The lessons cascade has its own tests, so here it is only checked as a call.
+vi.mock('../lessons/soft-delete-section-lessons.js', () => ({
+  softDeleteSectionLessons: vi.fn(),
+}));
 
 describe('SectionsService', () => {
   let service: SectionsService;
@@ -22,6 +28,14 @@ describe('SectionsService', () => {
     merge: vi.fn((section: Section, dto: Partial<Section>) =>
       Object.assign(section, dto),
     ),
+    manager: {
+      transaction: vi.fn(),
+    },
+  };
+
+  // The delete runs its queries on the transaction manager.
+  const transactionManager = {
+    softRemove: vi.fn(),
   };
 
   const mockCoursesService = {
@@ -54,6 +68,10 @@ describe('SectionsService', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockSectionsRepo.manager.transaction.mockImplementation(
+      (work: (manager: typeof transactionManager) => Promise<void>) =>
+        work(transactionManager),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -376,13 +394,27 @@ describe('SectionsService', () => {
       },
     };
 
-    it('should remove an existing section', async () => {
+    it('should soft delete the section with its lessons and content in one transaction', async () => {
       mockSectionsRepo.findOne.mockResolvedValue(section);
-      mockSectionsRepo.softRemove.mockResolvedValue(undefined);
 
       await expect(service.remove('s-1')).resolves.toBeUndefined();
 
-      expect(mockSectionsRepo.softRemove).toHaveBeenCalledWith(section);
+      expect(mockSectionsRepo.manager.transaction).toHaveBeenCalledTimes(1);
+      expect(softDeleteSectionLessons).toHaveBeenCalledWith(
+        transactionManager,
+        ['s-1'],
+      );
+      expect(transactionManager.softRemove).toHaveBeenCalledWith(
+        Section,
+        section,
+      );
+    });
+
+    it('should throw NotFoundException when the section does not exist', async () => {
+      mockSectionsRepo.findOne.mockResolvedValue(null);
+
+      await expect(service.remove('s-1')).rejects.toThrow(NotFoundException);
+      expect(mockSectionsRepo.manager.transaction).not.toHaveBeenCalled();
     });
   });
 });
