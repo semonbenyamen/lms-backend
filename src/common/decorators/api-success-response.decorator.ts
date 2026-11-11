@@ -1,18 +1,33 @@
 import { Type, applyDecorators } from '@nestjs/common';
-import {
-  ApiExtraModels,
-  ApiResponse,
-  getSchemaPath,
-} from '@nestjs/swagger';
+import { ApiExtraModels, ApiResponse, getSchemaPath } from '@nestjs/swagger';
 
 import { ApiResponseDto } from '../dto/api-response.dto.js';
+import { PaginationMetaDto } from '../pagintion/dto/pagination-meta.dto.js';
 
 export function ApiSuccessResponse(
   model: Type<unknown>,
   status: number = 200,
+  options?: { isArray?: boolean; isPaginated?: boolean },
 ) {
+  const list = { type: 'array', items: { $ref: getSchemaPath(model) } };
+
+  const getDataSchema = () => {
+    if (options?.isPaginated) {
+      return {
+        type: 'object',
+        required: ['items', 'meta'],
+        properties: {
+          items: list,
+          meta: { $ref: getSchemaPath(PaginationMetaDto) },
+        },
+      };
+    }
+
+    return options?.isArray ? list : { $ref: getSchemaPath(model) };
+  };
+
   return applyDecorators(
-    ApiExtraModels(ApiResponseDto, model),
+    ApiExtraModels(ApiResponseDto, PaginationMetaDto, model),
     ApiResponse({
       status,
       schema: {
@@ -26,9 +41,7 @@ export function ApiSuccessResponse(
                 type: 'number',
                 example: status,
               },
-              data: {
-                $ref: getSchemaPath(model),
-              },
+              data: getDataSchema(),
             },
           },
         ],

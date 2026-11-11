@@ -2,10 +2,15 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  OneToMany,
   PrimaryGeneratedColumn,
+  
   UpdateDateColumn,
 } from 'typeorm';
+import type { Relation } from 'typeorm';
+
 import { UserRole } from '../../common/enums/user-role.enum.js';
+import { Course } from '../../courses/entities/course.entity.js';
 
 @Entity('users')
 export class User {
@@ -23,6 +28,9 @@ export class User {
 
   @Column({ name: 'last_name' })
   lastName: string;
+
+  @OneToMany(() => Course, (course) => course.instructor)
+  courses: Relation<Course>[];
 
   @Column({
     type: 'enum',
