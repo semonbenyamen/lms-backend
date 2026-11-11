@@ -66,18 +66,16 @@ export class ContentOwnershipGuard implements CanActivate {
       throw new BadRequestException('Invalid content item ID');
     }
 
+    // The item keeps its course id, so the course comes in the same query.
     const contentItem = await this.contentItemsRepository.findOne({
       where: { id },
+      relations: { course: true },
     });
 
     if (!contentItem) {
       throw new NotFoundException(`Content item with ID ${id} not found`);
     }
 
-    const lesson = await this.lessonsService.findLessonWithCourse(
-      contentItem.lessonId,
-    );
-
-    return lesson.section.course.instructorId;
+    return contentItem.course.instructorId;
   }
 }

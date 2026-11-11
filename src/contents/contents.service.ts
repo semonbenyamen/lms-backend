@@ -118,16 +118,20 @@ export class ContentsService {
     id: string,
     user: Pick<JwtPayload, 'sub' | 'role'>,
   ): Promise<ContentItemResponseDto> {
-    const contentItem = await this.findContentItemEntity(id);
-    const lesson = await this.lessonsService.findLessonWithCourse(
-      contentItem.lessonId,
-    );
+    const notFoundMessage = `Content item with ID ${id} not found`;
 
-    await this.assertCanReadContent(
-      lesson.section.course,
-      user,
-      `Content item with ID ${id} not found`,
-    );
+    // The course is needed for the access check, so it comes in the same
+    // query, and the content is returned only after the check.
+    const contentItem = await this.contentItemsRepository.findOne({
+      where: { id },
+      relations: { course: true },
+    });
+
+    if (!contentItem) {
+      throw new NotFoundException(notFoundMessage);
+    }
+
+    await this.assertCanReadContent(contentItem.course, user, notFoundMessage);
 
     return toContentItemResponseDto(contentItem);
   }

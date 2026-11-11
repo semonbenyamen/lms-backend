@@ -58,6 +58,20 @@ describe('EnrollmentsService', () => {
     contentQueryBuilder.andWhere.mockReturnThis();
   });
 
+  it('should lock the enrollment inside the given transaction', async () => {
+    const manager = { findOne: vi.fn() };
+
+    await service.lockEnrollment(
+      'enrollment-1',
+      manager as unknown as EntityManager,
+    );
+
+    expect(manager.findOne).toHaveBeenCalledWith(Enrollment, {
+      where: { id: 'enrollment-1' },
+      lock: { mode: 'pessimistic_write' },
+    });
+  });
+
   it('should check an active enrollment in a course', async () => {
     enrollmentsRepository.exists.mockResolvedValue(true);
 

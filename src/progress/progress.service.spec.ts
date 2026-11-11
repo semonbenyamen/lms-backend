@@ -10,7 +10,6 @@ import { ContentType } from '../common/enums/content-type.enum.js';
 import { ContentsService } from '../contents/contents.service.js';
 import { EnrollmentsService } from '../enrollments/enrollments.service.js';
 import { CoursesService } from '../courses/courses.service.js';
-import { Enrollment } from '../enrollments/entities/enrollment.entity.js';
 import { ContentProgress } from './entities/content-progress.entity.js';
 import { ContentProgressHistory } from './entities/content-progress-history.entity.js';
 import { ProgressService } from './progress.service.js';
@@ -45,6 +44,7 @@ describe('ProgressService', () => {
 
   const enrollmentsService = {
     findActiveEnrollmentByContent: vi.fn(),
+    lockEnrollment: vi.fn(),
   };
 
   const progress = {
@@ -59,7 +59,6 @@ describe('ProgressService', () => {
 
   const manager = {
     getRepository: vi.fn(),
-    findOne: vi.fn(),
   };
 
   const dataSource = {
@@ -295,13 +294,13 @@ describe('ProgressService', () => {
       lastPositionSeconds: 10,
     });
 
-    expect(manager.findOne).toHaveBeenCalledWith(Enrollment, {
-      where: { id: enrollment.id },
-      lock: { mode: 'pessimistic_write' },
-    });
-    expect(manager.findOne.mock.invocationCallOrder[0]).toBeLessThan(
-      progress.findOne.mock.invocationCallOrder[0],
+    expect(enrollmentsService.lockEnrollment).toHaveBeenCalledWith(
+      enrollment.id,
+      manager,
     );
+    expect(
+      enrollmentsService.lockEnrollment.mock.invocationCallOrder[0],
+    ).toBeLessThan(progress.findOne.mock.invocationCallOrder[0]);
   });
 
   it('does not read progress when enrollment is missing', async () => {

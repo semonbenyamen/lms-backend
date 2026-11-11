@@ -139,10 +139,7 @@ export class ProgressService {
 
       // Updates of one student run one after another, so two parallel
       // requests cannot both read the old row and save a lower position.
-      await manager.findOne(Enrollment, {
-        where: { id: enrollmentId },
-        lock: { mode: 'pessimistic_write' },
-      });
+      await this.enrollmentsService.lockEnrollment(enrollmentId, manager);
 
       const current = await progressRepository.findOne({
         where: {

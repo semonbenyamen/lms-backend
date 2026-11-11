@@ -478,12 +478,14 @@ describe('ContentsService', () => {
     };
 
     const content = { id: 'ci-1', lessonId: 'l-1', title: 'Content' };
+    const publishedContent = {
+      ...content,
+      course: publishedLesson.section.course,
+    };
+    const draftContent = { ...content, course: draftLesson.section.course };
 
     it('should return published content to an enrolled student', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue(content);
-      mockLessonsService.findLessonWithCourse.mockResolvedValue(
-        publishedLesson,
-      );
+      mockContentItemsRepo.findOne.mockResolvedValue(publishedContent);
       mockEnrollmentsService.hasActiveEnrollment.mockResolvedValue(true);
 
       const result = await service.getContent('ci-1', studentUser);
@@ -493,21 +495,17 @@ describe('ContentsService', () => {
         'c-1',
       );
 
-      // The content is loaded alone and its course comes from LessonsService.
+      // The content and its course come in one query.
       expect(mockContentItemsRepo.findOne).toHaveBeenCalledWith({
         where: { id: 'ci-1' },
+        relations: { course: true },
       });
-      expect(mockLessonsService.findLessonWithCourse).toHaveBeenCalledWith(
-        'l-1',
-      );
+      expect(mockLessonsService.findLessonWithCourse).not.toHaveBeenCalled();
       expect(result).toEqual(content);
     });
 
     it('should throw ForbiddenException to a student who is not enrolled', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue(content);
-      mockLessonsService.findLessonWithCourse.mockResolvedValue(
-        publishedLesson,
-      );
+      mockContentItemsRepo.findOne.mockResolvedValue(publishedContent);
       mockEnrollmentsService.hasActiveEnrollment.mockResolvedValue(false);
 
       await expect(service.getContent('ci-1', studentUser)).rejects.toThrow(
@@ -516,10 +514,7 @@ describe('ContentsService', () => {
     });
 
     it('should throw ForbiddenException to another instructor who is not enrolled', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue(content);
-      mockLessonsService.findLessonWithCourse.mockResolvedValue(
-        publishedLesson,
-      );
+      mockContentItemsRepo.findOne.mockResolvedValue(publishedContent);
       mockEnrollmentsService.hasActiveEnrollment.mockResolvedValue(false);
 
       await expect(
@@ -528,10 +523,7 @@ describe('ContentsService', () => {
     });
 
     it('should not check an enrollment for the owner or an admin', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue(content);
-      mockLessonsService.findLessonWithCourse.mockResolvedValue(
-        publishedLesson,
-      );
+      mockContentItemsRepo.findOne.mockResolvedValue(publishedContent);
 
       await service.getContent('ci-1', instructorUser);
       await service.getContent('ci-1', adminUser);
@@ -540,8 +532,7 @@ describe('ContentsService', () => {
     });
 
     it('should throw NotFoundException to student for draft content', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue(content);
-      mockLessonsService.findLessonWithCourse.mockResolvedValue(draftLesson);
+      mockContentItemsRepo.findOne.mockResolvedValue(draftContent);
 
       await expect(service.getContent('ci-1', studentUser)).rejects.toThrow(
         NotFoundException,
@@ -549,8 +540,7 @@ describe('ContentsService', () => {
     });
 
     it('should throw NotFoundException to another instructor for draft content', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue(content);
-      mockLessonsService.findLessonWithCourse.mockResolvedValue(draftLesson);
+      mockContentItemsRepo.findOne.mockResolvedValue(draftContent);
 
       await expect(
         service.getContent('ci-1', otherInstructorUser),
@@ -558,8 +548,7 @@ describe('ContentsService', () => {
     });
 
     it('should return draft content to the owner and to admins', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue(content);
-      mockLessonsService.findLessonWithCourse.mockResolvedValue(draftLesson);
+      mockContentItemsRepo.findOne.mockResolvedValue(draftContent);
 
       await expect(service.getContent('ci-1', instructorUser)).resolves.toEqual(
         content,

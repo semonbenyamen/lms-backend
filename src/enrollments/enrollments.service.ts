@@ -28,6 +28,15 @@ export class EnrollmentsService {
     return count > 0;
   }
 
+  // Lock the enrollment until the transaction ends, so the updates of one
+  // student run one after another.
+  async lockEnrollment(id: string, manager: EntityManager): Promise<void> {
+    await manager.findOne(Enrollment, {
+      where: { id },
+      lock: { mode: 'pessimistic_write' },
+    });
+  }
+
   // Check if a student is actively enrolled in a course.
   async hasActiveEnrollment(
     studentId: string,
