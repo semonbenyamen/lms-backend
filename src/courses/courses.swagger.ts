@@ -98,5 +98,6 @@ export const ApiDeleteCourse = () =>
       [HttpStatus.BAD_REQUEST]: 'Invalid UUID format',
       [HttpStatus.FORBIDDEN]: NOT_COURSE_OWNER,
       [HttpStatus.NOT_FOUND]: 'Course not found',
+      [HttpStatus.CONFLICT]: 'Cannot delete a course with active enrollments',
     }),
   );
