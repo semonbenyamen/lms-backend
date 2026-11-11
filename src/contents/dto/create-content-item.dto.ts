@@ -74,6 +74,18 @@ export class CreateContentItemDto {
   imageUrl?: string;
 
   @ApiPropertyOptional({
+    example: 'lms/lessons/550e8400-e29b-41d4-a716-446655440003/9b2f...',
+    description:
+      'publicId from the upload signature, after the file is uploaded to Cloudinary. Use it instead of videoUrl or imageUrl',
+    maxLength: 255,
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  mediaPublicId?: string;
+
+  @ApiPropertyOptional({
     example: 640,
     description:
       'Duration of the video in seconds, kept for video content only',

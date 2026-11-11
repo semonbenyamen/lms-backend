@@ -17,12 +17,14 @@ import { ApiTags } from '@nestjs/swagger';
 
 import { Auth } from '../auth/decorators/auth.decorator.js';
 import type { AuthenticatedRequest } from '../auth/types/authenticated-request.type.js';
+import { UploadSignatureResponseDto } from '../common/cloudinary/dto/upload-signature-response.dto.js';
 import { IdResponseDto } from '../common/dto/id-response.dto.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
 import { PaginatedResult } from '../common/pagintion/pagination.util.js';
 import {
   ApiCreateCourse,
+  ApiCreateThumbnailSignature,
   ApiDeleteCourse,
   ApiGetCourse,
   ApiListCourses,
@@ -76,6 +78,17 @@ export class CoursesController {
     @Body() updateCourseDto: UpdateCourseDto,
   ): Promise<void> {
     return this.coursesService.update(id, updateCourseDto);
+  }
+
+  // Signing an image upload creates nothing here, so it returns 200.
+  @Post(':id/thumbnail-signature')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(CourseOwnershipGuard)
+  @ApiCreateThumbnailSignature()
+  createThumbnailSignature(
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): UploadSignatureResponseDto {
+    return this.coursesService.createThumbnailSignature(id);
   }
 
   @Delete(':id')
