@@ -306,12 +306,11 @@ export class CoursesService {
     id: string,
     manager: EntityManager,
   ): Promise<void> {
-    // Joins skip soft-deleted lessons and sections, so only live content counts.
+    // Deleting a section or lesson also deletes its content, so live content
+    // always sits in a live lesson and section.
     const hasContent = await manager
       .createQueryBuilder(ContentItem, 'content')
-      .innerJoin('content.lesson', 'lesson')
-      .innerJoin('lesson.section', 'section')
-      .where('section.courseId = :id', { id })
+      .where('content.courseId = :id', { id })
       .getExists();
 
     if (!hasContent) {

@@ -98,6 +98,11 @@ describe('ContentsService', () => {
     }).compile();
 
     service = module.get<ContentsService>(ContentsService);
+
+    // Content is created in a lesson of course c-1 unless a test says otherwise.
+    mockLessonsService.findLessonWithCourse.mockResolvedValue({
+      section: { course: { id: 'c-1' } },
+    });
   });
 
   describe('createUploadSignature', () => {
@@ -144,8 +149,15 @@ describe('ContentsService', () => {
 
       await service.create('l-1', dto);
 
+      expect(mockLessonsService.findLessonWithCourse).toHaveBeenCalledWith(
+        'l-1',
+      );
       expect(mockContentItemsRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ lessonId: 'l-1', title: 'Video Lecture' }),
+        expect.objectContaining({
+          lessonId: 'l-1',
+          courseId: 'c-1',
+          title: 'Video Lecture',
+        }),
       );
       expect(mockContentItemsRepo.save).toHaveBeenCalledWith(content);
     });
@@ -239,6 +251,7 @@ describe('ContentsService', () => {
           contentType: ContentType.VIDEO,
           orderIndex: 1,
           lessonId,
+          courseId: 'c-1',
           bodyText: null,
           videoUrl: videoAsset.secureUrl,
           imageUrl: null,
@@ -708,11 +721,9 @@ describe('ContentsService', () => {
       mockContentItemsRepo.findOne.mockResolvedValue({
         id: 'ci-1',
         lessonId: 'l-1',
+        courseId: 'c-1',
         contentType: ContentType.VIDEO,
         durationSeconds: 120,
-      });
-      mockLessonsService.findLessonWithCourse.mockResolvedValue({
-        section: { course: { id: 'c-1' } },
       });
 
       await expect(

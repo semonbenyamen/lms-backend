@@ -96,10 +96,13 @@ export class ContentsService {
   async create(lessonId: string, dto: CreateContentItemDto): Promise<void> {
     this.assertMediaInput(dto.contentType, dto);
 
+    const lesson = await this.lessonsService.findLessonWithCourse(lessonId);
+
     const { mediaPublicId, ...fields } = dto;
     const contentItem = this.contentItemsRepository.create({
       ...fields,
       lessonId,
+      courseId: lesson.section.course.id,
       mediaPublicId: null,
     });
 
@@ -193,14 +196,11 @@ export class ContentsService {
     id: string,
   ): Promise<ProgressContentReference> {
     const contentItem = await this.findContentItemEntity(id);
-    const lesson = await this.lessonsService.findLessonWithCourse(
-      contentItem.lessonId,
-    );
 
     return {
       contentType: contentItem.contentType,
       durationSeconds: contentItem.durationSeconds,
-      courseId: lesson.section.course.id,
+      courseId: contentItem.courseId,
     };
   }
 

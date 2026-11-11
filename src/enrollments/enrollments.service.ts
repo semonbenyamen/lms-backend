@@ -4,8 +4,6 @@ import { EntityManager, IsNull, Repository } from 'typeorm';
 
 import { EnrollmentStatus } from '../common/enums/enrollment-status.enum.js';
 import { ContentItem } from '../contents/entities/content-item.entity.js';
-import { Lesson } from '../lessons/entities/lesson.entity.js';
-import { Section } from '../sections/entities/section.entity.js';
 import { Enrollment } from './entities/enrollment.entity.js';
 
 @Injectable()
@@ -49,9 +47,11 @@ export class EnrollmentsService {
   ): Promise<Enrollment | null> {
     return this.enrollmentsRepository
       .createQueryBuilder('enrollment')
-      .innerJoin(Section, 'section', 'section.courseId = enrollment.courseId')
-      .innerJoin(Lesson, 'lesson', 'lesson.sectionId = section.id')
-      .innerJoin(ContentItem, 'content', 'content.lessonId = lesson.id')
+      .innerJoin(
+        ContentItem,
+        'content',
+        'content.courseId = enrollment.courseId',
+      )
       .where('enrollment.studentId = :studentId', { studentId })
       .andWhere('content.id = :contentId', { contentId })
       .andWhere('enrollment.cancelledAt IS NULL')

@@ -3,8 +3,6 @@ import { EntityManager, IsNull, Repository } from 'typeorm';
 
 import { EnrollmentStatus } from '../common/enums/enrollment-status.enum.js';
 import { ContentItem } from '../contents/entities/content-item.entity.js';
-import { Lesson } from '../lessons/entities/lesson.entity.js';
-import { Section } from '../sections/entities/section.entity.js';
 import { Enrollment } from './entities/enrollment.entity.js';
 import { EnrollmentsService } from './enrollments.service.js';
 
@@ -79,19 +77,9 @@ describe('EnrollmentsService', () => {
     ).resolves.toBe(existingEnrollment);
 
     expect(contentQueryBuilder.innerJoin).toHaveBeenCalledWith(
-      Section,
-      'section',
-      'section.courseId = enrollment.courseId',
-    );
-    expect(contentQueryBuilder.innerJoin).toHaveBeenCalledWith(
-      Lesson,
-      'lesson',
-      'lesson.sectionId = section.id',
-    );
-    expect(contentQueryBuilder.innerJoin).toHaveBeenCalledWith(
       ContentItem,
       'content',
-      'content.lessonId = lesson.id',
+      'content.courseId = enrollment.courseId',
     );
     expect(contentQueryBuilder.andWhere).toHaveBeenCalledWith(
       'content.id = :contentId',

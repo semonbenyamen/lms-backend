@@ -411,7 +411,7 @@ describe('CoursesService', () => {
         'content',
       );
       expect(contentQueryBuilder.where).toHaveBeenCalledWith(
-        'section.courseId = :id',
+        'content.courseId = :id',
         { id: 'course-1' },
       );
       expect(transactionManager.save).toHaveBeenCalledWith(
