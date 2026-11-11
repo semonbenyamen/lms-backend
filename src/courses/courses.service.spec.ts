@@ -1,15 +1,25 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { IsNull } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { CategoriesService } from '../categories/categories.service.js';
+import { CloudinaryService } from '../common/cloudinary/cloudinary.service.js';
+import { CloudinaryResourceType } from '../common/enums/cloudinary-resource-type.enum.js';
 import { CourseDifficulty } from '../common/enums/course-difficulty.enum.js';
 import { CourseLanguage } from '../common/enums/course-language.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
+import { softDeleteSectionLessons } from '../lessons/soft-delete-section-lessons.js';
+import { Section } from '../sections/entities/section.entity.js';
 import { CoursesService } from './courses.service.js';
 import { Course } from './entities/course.entity.js';
+
+// The lessons cascade has its own tests, so here it is only checked as a call.
+vi.mock('../lessons/soft-delete-section-lessons.js', () => ({
+  softDeleteSectionLessons: vi.fn(),
+}));
 
 describe('CoursesService', () => {
   let service: CoursesService;
@@ -24,10 +34,26 @@ describe('CoursesService', () => {
     remove: vi.fn(),
     softRemove: vi.fn(),
     createQueryBuilder: vi.fn(),
+    manager: {
+      transaction: vi.fn(),
+    },
+  };
+
+  // The delete runs its queries on the transaction manager.
+  const transactionManager = {
+    find: vi.fn(),
+    softDelete: vi.fn(),
+    softRemove: vi.fn(),
   };
 
   const mockCategoriesService = {
     assertExists: vi.fn(),
+  };
+
+  const mockCloudinaryService = {
+    createUploadSignature: vi.fn(),
+    getAssetDetails: vi.fn(),
+    deleteFile: vi.fn(),
   };
 
   // Loads the course with its category after a create, read or update.
@@ -82,6 +108,10 @@ describe('CoursesService', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockCoursesRepo.manager.transaction.mockImplementation(
+      (work: (manager: typeof transactionManager) => Promise<void>) =>
+        work(transactionManager),
+    );
     mockCoursesRepo.createQueryBuilder.mockReturnValue(courseQueryBuilder);
     courseQueryBuilder.getOne.mockImplementation(
       () => mockCoursesRepo.save.mock.results.at(-1)?.value,
@@ -97,6 +127,10 @@ describe('CoursesService', () => {
         {
           provide: CategoriesService,
           useValue: mockCategoriesService,
+        },
+        {
+          provide: CloudinaryService,
+          useValue: mockCloudinaryService,
         },
       ],
     }).compile();
@@ -320,6 +354,140 @@ describe('CoursesService', () => {
     });
   });
 
+  describe('Course Thumbnail', () => {
+    const newId = 'lms/courses/course-1/thumbnail/new';
+    const oldId = 'lms/courses/course-1/thumbnail/old';
+    const image = {
+      secureUrl: 'https://res.cloudinary.com/demo/image/upload/new.png',
+      publicId: newId,
+      resourceType: 'image',
+      format: 'png',
+      bytes: 2048,
+    };
+
+    const storedCourse = (thumbnailPublicId: string | null = oldId) => ({
+      id: 'course-1',
+      title: 'Course',
+      instructorId,
+      thumbnailUrl: thumbnailPublicId ? 'https://old.png' : null,
+      thumbnailPublicId,
+    });
+
+    beforeEach(() => {
+      mockCoursesRepo.save.mockImplementation((c) => Promise.resolve(c));
+    });
+
+    it('should sign an image upload inside the course folder', () => {
+      const signature = { publicId: 'signed', signature: 'abc' };
+      mockCloudinaryService.createUploadSignature.mockReturnValue(signature);
+
+      expect(service.createThumbnailSignature('course-1')).toBe(signature);
+      expect(mockCloudinaryService.createUploadSignature).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /^lms\/courses\/course-1\/thumbnail\/[0-9a-f-]{36}$/,
+        ),
+        CloudinaryResourceType.IMAGE,
+      );
+    });
+
+    it('should set the thumbnail and delete the old image after saving', async () => {
+      mockCoursesRepo.findOne.mockResolvedValue(storedCourse());
+      mockCloudinaryService.getAssetDetails.mockResolvedValue(image);
+
+      await service.update('course-1', { thumbnailPublicId: newId });
+
+      expect(mockCoursesRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          thumbnailUrl: image.secureUrl,
+          thumbnailPublicId: newId,
+        }),
+      );
+      expect(mockCloudinaryService.deleteFile).toHaveBeenCalledWith(
+        oldId,
+        CloudinaryResourceType.IMAGE,
+      );
+    });
+
+    it('should not delete anything for the first thumbnail', async () => {
+      mockCoursesRepo.findOne.mockResolvedValue(storedCourse(null));
+      mockCloudinaryService.getAssetDetails.mockResolvedValue(image);
+
+      await service.update('course-1', { thumbnailPublicId: newId });
+
+      expect(mockCloudinaryService.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it('should remove the thumbnail with null', async () => {
+      mockCoursesRepo.findOne.mockResolvedValue(storedCourse());
+
+      await service.update('course-1', { thumbnailPublicId: null });
+
+      expect(mockCoursesRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          thumbnailUrl: null,
+          thumbnailPublicId: null,
+        }),
+      );
+      expect(mockCloudinaryService.deleteFile).toHaveBeenCalledWith(
+        oldId,
+        CloudinaryResourceType.IMAGE,
+      );
+    });
+
+    it('should keep the thumbnail when other fields change', async () => {
+      mockCoursesRepo.findOne.mockResolvedValue(storedCourse());
+
+      await service.update('course-1', { title: 'New title' });
+
+      expect(mockCoursesRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ thumbnailPublicId: oldId }),
+      );
+      expect(mockCloudinaryService.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it('should reject an image uploaded for another course', async () => {
+      mockCoursesRepo.findOne.mockResolvedValue(storedCourse());
+
+      await expect(
+        service.update('course-1', {
+          thumbnailPublicId: 'lms/courses/course-2/thumbnail/new',
+        }),
+      ).rejects.toThrow('The uploaded image does not belong to this course');
+      expect(mockCoursesRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('should reject an image that is not valid', async () => {
+      mockCoursesRepo.findOne.mockResolvedValue(storedCourse());
+      mockCloudinaryService.getAssetDetails.mockResolvedValue({
+        ...image,
+        format: 'gif',
+      });
+
+      await expect(
+        service.update('course-1', { thumbnailPublicId: newId }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockCoursesRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('should log and not fail when deleting the old image fails', async () => {
+      const logError = vi
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      mockCoursesRepo.findOne.mockResolvedValue(storedCourse());
+      mockCloudinaryService.getAssetDetails.mockResolvedValue(image);
+      mockCloudinaryService.deleteFile.mockRejectedValue(
+        new Error('Cloudinary down'),
+      );
+
+      await expect(
+        service.update('course-1', { thumbnailPublicId: newId }),
+      ).resolves.toBeUndefined();
+      expect(logError).toHaveBeenCalled();
+
+      logError.mockRestore();
+    });
+  });
+
   describe('Course Deletion', () => {
     const course = {
       id: 'course-1',
@@ -327,14 +495,30 @@ describe('CoursesService', () => {
       instructorId,
     };
 
-    it('should soft delete the course', async () => {
+    it('should soft delete the course with its sections, lessons and content in one transaction', async () => {
       mockCoursesRepo.findOne.mockResolvedValue({ ...course });
-      mockCoursesRepo.softRemove.mockResolvedValue(undefined);
+      transactionManager.find.mockResolvedValue([{ id: 's-1' }, { id: 's-2' }]);
 
       await service.remove('course-1');
 
-      // Verify that deletion preserves the database record.
-      expect(mockCoursesRepo.softRemove).toHaveBeenCalledWith(course);
+      expect(mockCoursesRepo.manager.transaction).toHaveBeenCalledTimes(1);
+      expect(transactionManager.find).toHaveBeenCalledWith(Section, {
+        where: { courseId: 'course-1' },
+        select: { id: true },
+      });
+      expect(softDeleteSectionLessons).toHaveBeenCalledWith(
+        transactionManager,
+        ['s-1', 's-2'],
+      );
+      expect(transactionManager.softDelete).toHaveBeenCalledWith(Section, {
+        courseId: 'course-1',
+        deletedAt: IsNull(),
+      });
+      expect(transactionManager.softRemove).toHaveBeenCalledWith(
+        Course,
+        course,
+      );
+      // Deletion preserves the database records.
       expect(mockCoursesRepo.remove).not.toHaveBeenCalled();
     });
 
@@ -344,7 +528,7 @@ describe('CoursesService', () => {
       await expect(service.remove('missing-course')).rejects.toThrow(
         NotFoundException,
       );
-      expect(mockCoursesRepo.softRemove).not.toHaveBeenCalled();
+      expect(mockCoursesRepo.manager.transaction).not.toHaveBeenCalled();
     });
   });
 });

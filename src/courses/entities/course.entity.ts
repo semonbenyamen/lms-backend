@@ -6,6 +6,7 @@ import {
   Index,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
@@ -15,6 +16,7 @@ import { Category } from '../../categories/entities/category.entity.js';
 import { CourseDifficulty } from '../../common/enums/course-difficulty.enum.js';
 import { CourseLanguage } from '../../common/enums/course-language.enum.js';
 import { User } from '../../users/entities/user.entity.js';
+import { Section } from '../../sections/entities/section.entity.js';
 
 @Entity('courses')
 export class Course {
@@ -81,6 +83,9 @@ export class Course {
   @ManyToOne(() => User, (user) => user.courses, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'instructor_id' })
   instructor: Relation<User>;
+
+  @OneToMany(() => Section, (section) => section.course)
+  sections: Relation<Section>[];
 
   // Store timestamps with timezone information for consistent date handling.
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })

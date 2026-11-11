@@ -10,7 +10,7 @@ Backend service for the Learning Management System (LMS), built with NestJS, Pos
 - PostgreSQL 16
 - TypeORM
 - JWT Authentication
-- Argon2
+- bcrypt
 - Swagger / OpenAPI
 - Vitest
 - ESLint
