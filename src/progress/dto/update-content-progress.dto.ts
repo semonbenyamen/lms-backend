@@ -8,7 +8,10 @@ export class UpdateContentProgressDto {
   @IsBoolean()
   isCompleted?: boolean;
 
-  @ApiPropertyOptional({ description: 'Current video position in seconds', minimum: 0 })
+  @ApiPropertyOptional({
+    description: 'Current video position in seconds',
+    minimum: 0,
+  })
   @IsOptional()
   @IsInt()
   @Min(0)

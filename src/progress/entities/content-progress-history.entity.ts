@@ -1,4 +1,3 @@
-
 import {
   Check,
   Column,
@@ -34,7 +33,11 @@ export class ContentProgressHistory {
     nullable: false,
     onDelete: 'CASCADE',
   })
-  @JoinColumn({ name: 'enrollment_id' })
+  // Same FK names as the migration, so migration:generate finds no difference.
+  @JoinColumn({
+    name: 'enrollment_id',
+    foreignKeyConstraintName: 'FK_progress_history_enrollment',
+  })
   enrollment: Relation<Enrollment>;
 
   @Column({ name: 'content_item_id', type: 'uuid' })
@@ -44,7 +47,10 @@ export class ContentProgressHistory {
     nullable: false,
     onDelete: 'CASCADE',
   })
-  @JoinColumn({ name: 'content_item_id' })
+  @JoinColumn({
+    name: 'content_item_id',
+    foreignKeyConstraintName: 'FK_progress_history_content_item',
+  })
   contentItem: Relation<ContentItem>;
 
   @Column({

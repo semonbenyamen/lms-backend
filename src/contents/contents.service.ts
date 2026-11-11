@@ -62,6 +62,12 @@ type MediaInput = Pick<
   'mediaPublicId' | 'videoUrl' | 'imageUrl'
 >;
 
+// What the progress needs to check a content and its course.
+export type ProgressContentReference = Pick<
+  ContentItem,
+  'contentType' | 'durationSeconds'
+> & { courseId: string };
+
 @Injectable()
 export class ContentsService {
   private readonly logger = new Logger(ContentsService.name);
@@ -185,9 +191,7 @@ export class ContentsService {
   // The progress needs the type, the video length and the course of a content.
   async findProgressContentReference(
     id: string,
-  ): Promise<
-    Pick<ContentItem, 'contentType' | 'durationSeconds'> & { courseId: string }
-  > {
+  ): Promise<ProgressContentReference> {
     const contentItem = await this.findContentItemEntity(id);
     const lesson = await this.lessonsService.findLessonWithCourse(
       contentItem.lessonId,
@@ -203,7 +207,8 @@ export class ContentsService {
   // --- Helper Methods ---
 
   // A draft course's content looks missing to users who cannot read it.
-  // Students see the lesson names, but its content only after enrolling.
+  // Everyone sees the lesson names, but the content itself is only for the
+  // course owner, admins and the students enrolled in the course.
   private async assertCanReadContent(
     course: Course,
     user: Pick<JwtPayload, 'sub' | 'role'>,
@@ -213,8 +218,11 @@ export class ContentsService {
       throw new NotFoundException(notFoundMessage);
     }
 
+    const isOwnerOrAdmin =
+      user.role === UserRole.ADMIN || course.instructorId === user.sub;
+
     if (
-      user.role === UserRole.STUDENT &&
+      !isOwnerOrAdmin &&
       !(await this.enrollmentsService.hasActiveEnrollment(user.sub, course.id))
     ) {
       throw new ForbiddenException('Student enrollment required');

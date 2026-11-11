@@ -131,6 +131,15 @@ describe('ProgressService', () => {
     ).toHaveBeenCalledWith(studentId, contentId);
   });
 
+  it('returns the starting values for content not started yet', async () => {
+    await expect(service.getProgress(studentId, contentId)).resolves.toEqual({
+      contentItemId: contentId,
+      isCompleted: false,
+      lastPositionSeconds: 0,
+      completedAt: null,
+    });
+  });
+
   it('reads the progress for the current enrollment', async () => {
     await service.getProgress(studentId, contentId);
 

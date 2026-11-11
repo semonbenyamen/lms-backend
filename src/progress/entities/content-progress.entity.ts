@@ -17,9 +17,15 @@ import { ContentItem } from '../../contents/entities/content-item.entity.js';
 
 @Entity('content_progress')
 // Keep only one progress record for each enrollment and content item.
-@Unique('UQ_content_progress_enrollment_content', ['enrollmentId', 'contentItemId'])
+@Unique('UQ_content_progress_enrollment_content', [
+  'enrollmentId',
+  'contentItemId',
+])
 @Index('IDX_content_progress_content_id', ['contentItemId'])
-@Check('CHK_content_progress_position_nonnegative', '"last_position_seconds" >= 0')
+@Check(
+  'CHK_content_progress_position_nonnegative',
+  '"last_position_seconds" >= 0',
+)
 export class ContentProgress {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -29,7 +35,11 @@ export class ContentProgress {
 
   // Remove progress when the enrollment is removed.
   @ManyToOne(() => Enrollment, { nullable: false, onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'enrollment_id' })
+  // Same FK names as the migration, so migration:generate finds no difference.
+  @JoinColumn({
+    name: 'enrollment_id',
+    foreignKeyConstraintName: 'FK_content_progress_enrollment',
+  })
   enrollment: Relation<Enrollment>;
 
   @Column({ name: 'content_item_id', type: 'uuid' })
@@ -37,12 +47,15 @@ export class ContentProgress {
 
   // Remove progress when its content item is removed.
   @ManyToOne(() => ContentItem, { nullable: false, onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'content_item_id' })
+  @JoinColumn({
+    name: 'content_item_id',
+    foreignKeyConstraintName: 'FK_content_progress_content',
+  })
   contentItem: Relation<ContentItem>;
 
   // Track whether the student has completed this content.
-@Column({ name: 'is_completed', type: 'boolean', default: false })
-isCompleted: boolean;
+  @Column({ name: 'is_completed', type: 'boolean', default: false })
+  isCompleted: boolean;
 
   @Column({ name: 'last_position_seconds', type: 'int', default: 0 })
   lastPositionSeconds: number;

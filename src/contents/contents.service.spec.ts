@@ -501,6 +501,18 @@ describe('ContentsService', () => {
       );
     });
 
+    it('should throw ForbiddenException to another instructor who is not enrolled', async () => {
+      mockContentItemsRepo.findOne.mockResolvedValue(content);
+      mockLessonsService.findLessonWithCourse.mockResolvedValue(
+        publishedLesson,
+      );
+      mockEnrollmentsService.hasActiveEnrollment.mockResolvedValue(false);
+
+      await expect(
+        service.getContent('ci-1', otherInstructorUser),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
     it('should not check an enrollment for the owner or an admin', async () => {
       mockContentItemsRepo.findOne.mockResolvedValue(content);
       mockLessonsService.findLessonWithCourse.mockResolvedValue(
