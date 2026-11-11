@@ -83,7 +83,14 @@ export const ApiUpdateCoursePublication = () =>
       type: UpdateCoursePublicationDto,
       examples: {
         publish: { summary: 'Publish', value: { isPublished: true } },
-        unpublish: { summary: 'Unpublish', value: { isPublished: false } },
+        unpublish: {
+          summary: 'Unpublish (no enrolled students)',
+          value: { isPublished: false },
+        },
+        unpublishWithEnrollments: {
+          summary: 'Unpublish a course with enrolled students',
+          value: { isPublished: false, confirmUnpublishWithEnrollments: true },
+        },
       },
     }),
     ApiResponse({
@@ -95,6 +102,10 @@ export const ApiUpdateCoursePublication = () =>
       [HttpStatus.BAD_REQUEST]: 'Invalid UUID format or request body',
       [HttpStatus.FORBIDDEN]: NOT_COURSE_OWNER,
       [HttpStatus.NOT_FOUND]: 'Course not found',
+      [HttpStatus.CONFLICT]:
+        'Unpublishing a course with enrolled students needs confirmUnpublishWithEnrollments',
+      [HttpStatus.UNPROCESSABLE_ENTITY]:
+        'Publishing needs at least one section, lesson and content',
     }),
   );
 

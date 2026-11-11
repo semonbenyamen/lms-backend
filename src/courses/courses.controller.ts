@@ -90,10 +90,7 @@ export class CoursesController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() updatePublicationDto: UpdateCoursePublicationDto,
   ): Promise<void> {
-    return this.coursesService.setPublished(
-      id,
-      updatePublicationDto.isPublished,
-    );
+    return this.coursesService.setPublication(id, updatePublicationDto);
   }
 
   // Signing an image upload creates nothing here, so it returns 200.

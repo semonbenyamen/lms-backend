@@ -3,6 +3,7 @@ import {
   ConflictException,
   Logger,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -19,6 +20,7 @@ import { UserRole } from '../common/enums/user-role.enum.js';
 import { EnrollmentsService } from '../enrollments/enrollments.service.js';
 import { softDeleteSectionLessons } from '../lessons/soft-delete-section-lessons.js';
 import { Section } from '../sections/entities/section.entity.js';
+import { ContentItem } from '../contents/entities/content-item.entity.js';
 import { CoursesService } from './courses.service.js';
 import { Course } from './entities/course.entity.js';
 
@@ -49,8 +51,17 @@ describe('CoursesService', () => {
   const transactionManager = {
     findOne: vi.fn(),
     find: vi.fn(),
+    save: vi.fn(),
     softDelete: vi.fn(),
     softRemove: vi.fn(),
+    createQueryBuilder: vi.fn(),
+  };
+
+  // Checks that a course has content before it is published.
+  const contentQueryBuilder = {
+    innerJoin: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    getExists: vi.fn(),
   };
 
   const mockEnrollmentsService = {
@@ -124,6 +135,7 @@ describe('CoursesService', () => {
         work(transactionManager),
     );
     mockCoursesRepo.createQueryBuilder.mockReturnValue(courseQueryBuilder);
+    transactionManager.createQueryBuilder.mockReturnValue(contentQueryBuilder);
     courseQueryBuilder.getOne.mockImplementation(
       () => mockCoursesRepo.save.mock.results.at(-1)?.value,
     );
@@ -375,38 +387,100 @@ describe('CoursesService', () => {
     });
   });
 
-  describe('Course Publishing', () => {
-    it('should publish the course', async () => {
-      mockCoursesRepo.findOne.mockResolvedValue(courseEntity('course-1'));
+  describe('Course Publication', () => {
+    const draft = () => ({ ...courseEntity('course-1'), isPublished: false });
+    const published = () => ({
+      ...courseEntity('course-1'),
+      isPublished: true,
+    });
+
+    it('should lock the course and publish it when it has content', async () => {
+      transactionManager.findOne.mockResolvedValue(draft());
+      contentQueryBuilder.getExists.mockResolvedValue(true);
 
       await expect(
-        service.setPublished('course-1', true),
+        service.setPublication('course-1', { isPublished: true }),
       ).resolves.toBeUndefined();
-      expect(mockCoursesRepo.save).toHaveBeenCalledWith(
+
+      expect(transactionManager.findOne).toHaveBeenCalledWith(Course, {
+        where: { id: 'course-1' },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(transactionManager.createQueryBuilder).toHaveBeenCalledWith(
+        ContentItem,
+        'content',
+      );
+      expect(contentQueryBuilder.where).toHaveBeenCalledWith(
+        'section.courseId = :id',
+        { id: 'course-1' },
+      );
+      expect(transactionManager.save).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'course-1', isPublished: true }),
       );
     });
 
-    it('should unpublish the course', async () => {
-      mockCoursesRepo.findOne.mockResolvedValue({
-        ...courseEntity('course-1'),
-        isPublished: true,
-      });
+    it('should not publish a course without content', async () => {
+      transactionManager.findOne.mockResolvedValue(draft());
+      contentQueryBuilder.getExists.mockResolvedValue(false);
 
-      await service.setPublished('course-1', false);
+      await expect(
+        service.setPublication('course-1', { isPublished: true }),
+      ).rejects.toThrow(UnprocessableEntityException);
+      expect(transactionManager.save).not.toHaveBeenCalled();
+    });
 
-      expect(mockCoursesRepo.save).toHaveBeenCalledWith(
+    it('should unpublish a course without enrolled students', async () => {
+      transactionManager.findOne.mockResolvedValue(published());
+      mockEnrollmentsService.hasActiveEnrollments.mockResolvedValue(false);
+
+      await service.setPublication('course-1', { isPublished: false });
+
+      expect(transactionManager.save).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'course-1', isPublished: false }),
       );
     });
 
-    it('should reject a course that does not exist', async () => {
-      mockCoursesRepo.findOne.mockResolvedValue(null);
+    it('should ask for confirmation before unpublishing a course with enrolled students', async () => {
+      transactionManager.findOne.mockResolvedValue(published());
+      mockEnrollmentsService.hasActiveEnrollments.mockResolvedValue(true);
 
-      await expect(service.setPublished('course-1', true)).rejects.toThrow(
-        NotFoundException,
+      await expect(
+        service.setPublication('course-1', { isPublished: false }),
+      ).rejects.toThrow(ConflictException);
+      expect(transactionManager.save).not.toHaveBeenCalled();
+    });
+
+    it('should unpublish a course with enrolled students after confirmation', async () => {
+      transactionManager.findOne.mockResolvedValue(published());
+
+      await service.setPublication('course-1', {
+        isPublished: false,
+        confirmUnpublishWithEnrollments: true,
+      });
+
+      expect(
+        mockEnrollmentsService.hasActiveEnrollments,
+      ).not.toHaveBeenCalled();
+      expect(transactionManager.save).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'course-1', isPublished: false }),
       );
-      expect(mockCoursesRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('should change nothing when the course already has that state', async () => {
+      transactionManager.findOne.mockResolvedValue(published());
+
+      await service.setPublication('course-1', { isPublished: true });
+
+      expect(contentQueryBuilder.getExists).not.toHaveBeenCalled();
+      expect(transactionManager.save).not.toHaveBeenCalled();
+    });
+
+    it('should reject a course that does not exist', async () => {
+      transactionManager.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.setPublication('course-1', { isPublished: true }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

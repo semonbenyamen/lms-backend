@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
@@ -15,6 +16,7 @@ import { assertValidAsset } from '../common/cloudinary/assert-valid-asset.js';
 import { CloudinaryService } from '../common/cloudinary/cloudinary.service.js';
 import { UploadSignatureResponseDto } from '../common/cloudinary/dto/upload-signature-response.dto.js';
 import { CloudinaryResourceType } from '../common/enums/cloudinary-resource-type.enum.js';
+import { ContentItem } from '../contents/entities/content-item.entity.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { IdResponseDto } from '../common/dto/id-response.dto.js';
 import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
@@ -25,6 +27,7 @@ import {
 } from '../common/pagintion/pagination.util.js';
 import { CourseResponseDto } from './dto/course-response.dto.js';
 import { CreateCourseDto } from './dto/create-course.dto.js';
+import { UpdateCoursePublicationDto } from './dto/update-course-publication.dto.js';
 import { UpdateCourseDto } from './dto/update-course.dto.js';
 import { EnrollmentsService } from '../enrollments/enrollments.service.js';
 import { softDeleteSectionLessons } from '../lessons/soft-delete-section-lessons.js';
@@ -153,12 +156,45 @@ export class CoursesService {
   }
 
   // Ownership is verified by CourseOwnershipGuard before this runs.
-  async setPublished(id: string, isPublished: boolean): Promise<void> {
-    const course = await this.findCourseEntity(id);
+  async setPublication(
+    id: string,
+    updatePublicationDto: UpdateCoursePublicationDto,
+  ): Promise<void> {
+    const { isPublished, confirmUnpublishWithEnrollments } =
+      updatePublicationDto;
 
-    course.isPublished = isPublished;
+    await this.coursesRepository.manager.transaction(async (manager) => {
+      // Locked, so no student can enroll while the publication changes.
+      const course = await manager.findOne(Course, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
 
-    await this.coursesRepository.save(course);
+      if (!course) {
+        throw new NotFoundException(`Course with ID ${id} not found`);
+      }
+
+      if (course.isPublished === isPublished) {
+        return;
+      }
+
+      if (isPublished) {
+        await this.assertHasContent(id, manager);
+      } else if (
+        !confirmUnpublishWithEnrollments &&
+        (await this.enrollmentsService.hasActiveEnrollments(id, manager))
+      ) {
+        // Enrolled students lose access to the content, so the instructor
+        // must confirm it first.
+        throw new ConflictException(
+          'The course has enrolled students who will lose access to its content, send confirmUnpublishWithEnrollments to unpublish it anyway',
+        );
+      }
+
+      course.isPublished = isPublished;
+
+      await manager.save(course);
+    });
   }
 
   // Ownership is verified by CourseOwnershipGuard before this runs.
@@ -251,6 +287,26 @@ export class CoursesService {
   }
 
   // --- Helper Methods ---
+
+  // A course is published only with at least one section, lesson and content.
+  private async assertHasContent(
+    id: string,
+    manager: EntityManager,
+  ): Promise<void> {
+    // Joins skip soft-deleted lessons and sections, so only live content counts.
+    const hasContent = await manager
+      .createQueryBuilder(ContentItem, 'content')
+      .innerJoin('content.lesson', 'lesson')
+      .innerJoin('lesson.section', 'section')
+      .where('section.courseId = :id', { id })
+      .getExists();
+
+    if (!hasContent) {
+      throw new UnprocessableEntityException(
+        'Cannot publish a course without at least one section, lesson and content',
+      );
+    }
+  }
 
   // null removes the thumbnail; a public id is checked before it is used.
   private async applyThumbnail(
