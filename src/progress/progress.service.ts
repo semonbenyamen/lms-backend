@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -31,6 +32,31 @@ export class ProgressService {
     private readonly dataSource: DataSource,
   ) {}
 
+  // Missing or deleted content is a 404, existing content without an
+  // enrollment is a 403. Content metadata is still not loaded here.
+  private async findEnrollmentOrFail(
+    studentId: string,
+    contentId: string,
+  ): Promise<Enrollment> {
+    const enrollment =
+      await this.enrollmentsService.findActiveEnrollmentByContent(
+        studentId,
+        contentId,
+      );
+
+    if (enrollment) {
+      return enrollment;
+    }
+
+    if (!(await this.contentsService.contentExists(contentId))) {
+      throw new NotFoundException(
+        `Content item with ID ${contentId} not found`,
+      );
+    }
+
+    throw new ForbiddenException('Student is not enrolled in this course');
+  }
+
   // Only enrolled students can access progress for published content.
   private async getAccess(
     studentId: string,
@@ -40,15 +66,7 @@ export class ProgressService {
     enrollment: Enrollment;
   }> {
     // Check enrollment before loading content metadata.
-    const enrollment =
-      await this.enrollmentsService.findActiveEnrollmentByContent(
-        studentId,
-        contentId,
-      );
-
-    if (!enrollment) {
-      throw new ForbiddenException('Student is not enrolled in this course');
-    }
+    const enrollment = await this.findEnrollmentOrFail(studentId, contentId);
 
     // Load minimal metadata only after enrollment is confirmed.
     const content =
@@ -65,15 +83,7 @@ export class ProgressService {
     studentId: string,
     contentId: string,
   ): Promise<ContentProgressResponseDto> {
-    const enrollment =
-      await this.enrollmentsService.findActiveEnrollmentByContent(
-        studentId,
-        contentId,
-      );
-
-    if (!enrollment) {
-      throw new ForbiddenException('Student is not enrolled in this course');
-    }
+    const enrollment = await this.findEnrollmentOrFail(studentId, contentId);
 
     // Verify course publication without fetching content metadata.
     await this.coursesService.findPublishedById(enrollment.courseId);
@@ -126,6 +136,13 @@ export class ProgressService {
     return this.dataSource.transaction(async (manager) => {
       const progressRepository = manager.getRepository(ContentProgress);
       const historyRepository = manager.getRepository(ContentProgressHistory);
+
+      // Updates of one student run one after another, so two parallel
+      // requests cannot both read the old row and save a lower position.
+      await manager.findOne(Enrollment, {
+        where: { id: enrollmentId },
+        lock: { mode: 'pessimistic_write' },
+      });
 
       const current = await progressRepository.findOne({
         where: {

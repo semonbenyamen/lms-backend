@@ -10,6 +10,7 @@ import { ContentType } from '../common/enums/content-type.enum.js';
 import { ContentsService } from '../contents/contents.service.js';
 import { EnrollmentsService } from '../enrollments/enrollments.service.js';
 import { CoursesService } from '../courses/courses.service.js';
+import { Enrollment } from '../enrollments/entities/enrollment.entity.js';
 import { ContentProgress } from './entities/content-progress.entity.js';
 import { ContentProgressHistory } from './entities/content-progress-history.entity.js';
 import { ProgressService } from './progress.service.js';
@@ -35,6 +36,7 @@ describe('ProgressService', () => {
 
   const contentsService = {
     findProgressContentReference: vi.fn(),
+    contentExists: vi.fn(),
   };
 
   const coursesService = {
@@ -57,6 +59,7 @@ describe('ProgressService', () => {
 
   const manager = {
     getRepository: vi.fn(),
+    findOne: vi.fn(),
   };
 
   const dataSource = {
@@ -69,6 +72,7 @@ describe('ProgressService', () => {
     vi.resetAllMocks();
 
     contentsService.findProgressContentReference.mockResolvedValue(content);
+    contentsService.contentExists.mockResolvedValue(true);
 
     coursesService.findPublishedById.mockResolvedValue({
       id: courseId,
@@ -267,6 +271,37 @@ describe('ProgressService', () => {
 
     expect(progress.upsert).toHaveBeenCalledOnce();
     expect(history.insert).toHaveBeenCalledOnce();
+  });
+
+  it('returns 404 for missing or deleted content', async () => {
+    enrollmentsService.findActiveEnrollmentByContent.mockResolvedValue(null);
+    contentsService.contentExists.mockResolvedValue(false);
+
+    await expect(service.getProgress(studentId, contentId)).rejects.toThrow(
+      NotFoundException,
+    );
+    await expect(
+      service.updateStudentContentProgress(studentId, contentId, {
+        isCompleted: true,
+      }),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(contentsService.contentExists).toHaveBeenCalledWith(contentId);
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('locks the enrollment before reading the current progress', async () => {
+    await service.updateStudentContentProgress(studentId, contentId, {
+      lastPositionSeconds: 10,
+    });
+
+    expect(manager.findOne).toHaveBeenCalledWith(Enrollment, {
+      where: { id: enrollment.id },
+      lock: { mode: 'pessimistic_write' },
+    });
+    expect(manager.findOne.mock.invocationCallOrder[0]).toBeLessThan(
+      progress.findOne.mock.invocationCallOrder[0],
+    );
   });
 
   it('does not read progress when enrollment is missing', async () => {

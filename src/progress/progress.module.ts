@@ -20,6 +20,5 @@ import { ContentProgressHistory } from './entities/content-progress-history.enti
   ],
   controllers: [ProgressController],
   providers: [ProgressService],
-  exports: [ProgressService],
 })
 export class ProgressModule {}

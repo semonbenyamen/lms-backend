@@ -31,6 +31,7 @@ describe('ContentsService', () => {
     ),
     findOne: vi.fn(),
     find: vi.fn(),
+    exists: vi.fn(),
     softRemove: vi.fn(),
   };
 
@@ -713,6 +714,17 @@ describe('ContentsService', () => {
         NotFoundException,
       );
       expect(mockContentItemsRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('contentExists', () => {
+    it('should check the content by its id', async () => {
+      mockContentItemsRepo.exists.mockResolvedValue(true);
+
+      await expect(service.contentExists('ci-1')).resolves.toBe(true);
+      expect(mockContentItemsRepo.exists).toHaveBeenCalledWith({
+        where: { id: 'ci-1' },
+      });
     });
   });
 

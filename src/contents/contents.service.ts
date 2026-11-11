@@ -192,6 +192,11 @@ export class ContentsService {
   }
 
   // The progress needs the type, the video length and the course of a content.
+  // Deleted content is skipped, so it does not exist for progress either.
+  async contentExists(id: string): Promise<boolean> {
+    return this.contentItemsRepository.exists({ where: { id } });
+  }
+
   async findProgressContentReference(
     id: string,
   ): Promise<ProgressContentReference> {
