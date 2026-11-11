@@ -19,6 +19,7 @@ import { CategoriesModule } from './categories/categories.module.js';
 import { LessonsModule } from './lessons/lessons.module.js';
 import { ContentsModule } from './contents/contents.module.js';
 import { CourseEnrollmentModule } from './course-enrollment/course-enrollment.module.js';
+import { ProgressModule } from './progress/progress.module.js';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { CourseEnrollmentModule } from './course-enrollment/course-enrollment.mo
     ContentsModule,
     EnrollmentsModule,
     CourseEnrollmentModule,
+    ProgressModule,
   ],
 
   controllers: [AppController],
