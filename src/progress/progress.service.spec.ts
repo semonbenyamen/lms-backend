@@ -326,6 +326,61 @@ describe('ProgressService', () => {
     expect(courseProgress.refreshEnrollment).not.toHaveBeenCalled();
   });
 
+  it('rejects progress updates without any progress fields', async () => {
+    await expect(
+      service.updateStudentContentProgress(studentId, contentId, {}),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('does not refresh course completion when saving progress fails', async () => {
+    progress.upsert.mockRejectedValue(new Error('Progress save failed'));
+
+    await expect(
+      service.updateStudentContentProgress(studentId, contentId, {
+        isCompleted: true,
+      }),
+    ).rejects.toThrow('Progress save failed');
+
+    expect(history.insert).not.toHaveBeenCalled();
+    expect(courseProgress.refreshEnrollment).not.toHaveBeenCalled();
+  });
+
+  it('rejects an enrollment cancelled before the transaction lock', async () => {
+    enrollmentsService.lockEnrollment.mockResolvedValue({
+      ...enrollment,
+      cancelledAt: new Date(),
+    });
+
+    await expect(
+      service.updateStudentContentProgress(studentId, contentId, {
+        isCompleted: true,
+      }),
+    ).rejects.toThrow(ForbiddenException);
+
+    expect(progress.upsert).not.toHaveBeenCalled();
+    expect(history.insert).not.toHaveBeenCalled();
+    expect(courseProgress.refreshEnrollment).not.toHaveBeenCalled();
+  });
+
+  it('propagates enrollment refresh failures within the transaction', async () => {
+    courseProgress.refreshEnrollment.mockRejectedValue(
+      new Error('Enrollment refresh failed'),
+    );
+
+    await expect(
+      service.updateStudentContentProgress(studentId, contentId, {
+        isCompleted: true,
+      }),
+    ).rejects.toThrow('Enrollment refresh failed');
+
+    expect(dataSource.transaction).toHaveBeenCalledOnce();
+    expect(progress.upsert).toHaveBeenCalledOnce();
+    expect(history.insert).toHaveBeenCalledOnce();
+    expect(courseProgress.refreshEnrollment).toHaveBeenCalledOnce();
+  });
+
   it('does not read progress when enrollment is missing', async () => {
     enrollmentsService.findActiveEnrollmentByContent.mockResolvedValue(null);
 
