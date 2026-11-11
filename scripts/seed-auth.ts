@@ -1,4 +1,3 @@
-
 /**
  * Development-only authentication demo seeder.
  * Run from the repository root: pnpm seed:auth
@@ -6,42 +5,36 @@
  */
 
 import 'dotenv/config';
-import { Client } from 'pg';
 import * as bcrypt from 'bcrypt';
 
-type DemoRole = 'admin' | 'instructor' | 'student';
+import { UserRole } from '../src/common/enums/user-role.enum.js';
+import { AppDataSource } from '../src/database/data-source.js';
+import { User } from '../src/users/entities/user.entity.js';
 
-interface DemoUser {
-  email: string;
-  firstName: string;
-  lastName: string;
-  role: DemoRole;
-}
-
-const demoUsers: DemoUser[] = [
+const demoUsers: Pick<User, 'email' | 'firstName' | 'lastName' | 'role'>[] = [
   {
     email: 'demo.admin@example.com',
     firstName: 'Demo',
     lastName: 'Admin',
-    role: 'admin',
+    role: UserRole.ADMIN,
   },
   {
     email: 'demo.instructor1@example.com',
     firstName: 'Demo',
     lastName: 'Instructor One',
-    role: 'instructor',
+    role: UserRole.INSTRUCTOR,
   },
   {
     email: 'demo.instructor2@example.com',
     firstName: 'Demo',
     lastName: 'Instructor Two',
-    role: 'instructor',
+    role: UserRole.INSTRUCTOR,
   },
   {
     email: 'demo.student@example.com',
     firstName: 'Demo',
     lastName: 'Student',
-    role: 'student',
+    role: UserRole.STUDENT,
   },
 ];
 
@@ -50,12 +43,7 @@ async function main(): Promise<void> {
     throw new Error('Auth demo seeding is disabled in production.');
   }
 
-  const databaseUrl = process.env.DATABASE_URL;
   const password = process.env.SEED_AUTH_PASSWORD;
-
-  if (!databaseUrl) {
-    throw new Error('DATABASE_URL is required in .env.');
-  }
 
   if (!password || password.length < 8 || password.length > 128) {
     throw new Error(
@@ -63,77 +51,32 @@ async function main(): Promise<void> {
     );
   }
 
-  const client = new Client({ connectionString: databaseUrl });
+  const passwordHash = await bcrypt.hash(password, 12);
 
-  await client.connect();
+  await AppDataSource.initialize();
 
   try {
-    await client.query('BEGIN');
-
-    const passwordHash = await bcrypt.hash(password, 12);
-
-    for (const user of demoUsers) {
-      const result = await client.query(
-        `
-        INSERT INTO users (
-          email, password_hash, first_name, last_name, role, is_verified
-        )
-        VALUES (
-          $1, $2, $3, $4, $5::public.users_role_enum, true
-        )
-        ON CONFLICT (email) DO UPDATE SET
-          password_hash = EXCLUDED.password_hash,
-          first_name = EXCLUDED.first_name,
-          last_name = EXCLUDED.last_name,
-          role = EXCLUDED.role,
-          is_verified = true,
-          updated_at = now()
-        RETURNING id, email, role, is_verified
-        `,
-        [
-          user.email,
-          passwordHash,
-          user.firstName,
-          user.lastName,
-          user.role,
-        ],
-      );
-
-      if (result.rowCount !== 1) {
-        throw new Error(`Could not seed ${user.email}`);
-      }
-    }
-
-    await client.query('COMMIT');
-
-    console.log('Auth demo seed completed successfully.');
-
-    for (const user of demoUsers) {
-      console.log(`${user.role.padEnd(10)} ${user.email}`);
-    }
-
-    console.log(
-      'All accounts are verified and use SEED_AUTH_PASSWORD.',
+    // Upsert on email, so rerunning resets the same four accounts.
+    await AppDataSource.getRepository(User).upsert(
+      demoUsers.map((user) => ({ ...user, passwordHash, isVerified: true })),
+      ['email'],
     );
-    console.log(
-      'Warning: rerunning resets these four demo accounts.',
-    );
-  } catch (error: unknown) {
-    try {
-      await client.query('ROLLBACK');
-    } catch {
-      // Preserve the original error.
-    }
-
-    throw error;
   } finally {
-    await client.end();
+    await AppDataSource.destroy();
   }
+
+  console.log('Auth demo seed completed successfully.');
+
+  for (const user of demoUsers) {
+    console.log(`${user.role.padEnd(10)} ${user.email}`);
+  }
+
+  console.log('All accounts are verified and use SEED_AUTH_PASSWORD.');
+  console.log('Warning: rerunning resets these four demo accounts.');
 }
 
 main().catch((error: unknown) => {
-  const message =
-    error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error ? error.message : String(error);
 
   console.error('Auth seed failed:', message);
   process.exitCode = 1;

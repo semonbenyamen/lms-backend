@@ -25,7 +25,7 @@
     "migration:run": "pnpm exec typeorm-ts-node-esm migration:run -d src/database/data-source.ts",
     "migration:revert": "pnpm exec typeorm-ts-node-esm migration:revert -d src/database/data-source.ts",
     "prepare": "husky",
-    "seed:auth": "tsx scripts/seed-auth.ts"
+    "seed:auth": "node --loader ts-node/esm scripts/seed-auth.ts"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
