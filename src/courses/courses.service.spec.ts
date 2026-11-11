@@ -572,7 +572,7 @@ describe('CoursesService', () => {
   });
 
   describe('Course Enrollment Lookup', () => {
-    it('should lock and return a published course', async () => {
+    it('should share lock and return a published course', async () => {
       const course = { id: 'course-1', isPublished: true };
       transactionManager.findOne.mockResolvedValue(course);
 
@@ -584,7 +584,7 @@ describe('CoursesService', () => {
       ).resolves.toBe(course);
       expect(transactionManager.findOne).toHaveBeenCalledWith(Course, {
         where: { id: 'course-1', isPublished: true },
-        lock: { mode: 'pessimistic_write' },
+        lock: { mode: 'pessimistic_read' },
       });
     });
 

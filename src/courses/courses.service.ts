@@ -147,14 +147,15 @@ export class CoursesService {
     }
   }
 
-  // Locks the course, so the enrollment that follows waits for a delete.
+  // A shared lock: a running delete makes the enrollment wait, while
+  // students enrolling in the same course do not wait for each other.
   async findPublishedCourseForEnrollment(
     id: string,
     manager: EntityManager,
   ): Promise<Course> {
     const course = await manager.findOne(Course, {
       where: { id, isPublished: true },
-      lock: { mode: 'pessimistic_write' },
+      lock: { mode: 'pessimistic_read' },
     });
 
     if (!course) {

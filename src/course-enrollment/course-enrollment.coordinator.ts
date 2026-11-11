@@ -20,7 +20,7 @@ export class CourseEnrollmentCoordinator {
   ): Promise<{ enrollment: Enrollment; created: boolean }> {
     try {
       return await this.dataSource.transaction(async (manager) => {
-        // Lock the course before checking enrollment.
+        // Share lock the course, so a delete cannot run until this commits.
         await this.coursesService.findPublishedCourseForEnrollment(
           courseId,
           manager,
@@ -34,7 +34,8 @@ export class CourseEnrollmentCoordinator {
         );
       });
     } catch (error) {
-      // Handle a duplicate enrollment created by another request.
+      // Two requests from the same student can both pass the check above,
+      // so the unique constraint rejects the second and we return the first.
       if (isUniqueViolation(error)) {
         const existing = await this.enrollmentsService.findExistingEnrollment(
           studentId,

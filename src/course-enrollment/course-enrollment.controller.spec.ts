@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Response } from 'express';
 
 import type { AuthenticatedRequest } from '../auth/types/authenticated-request.type.js';
+import { EnrollmentStatus } from '../common/enums/enrollment-status.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { CourseEnrollmentController } from './course-enrollment.controller.js';
 import { CourseEnrollmentCoordinator } from './course-enrollment.coordinator.js';
@@ -26,6 +27,34 @@ describe('CourseEnrollmentController', () => {
     status: vi.fn().mockReturnThis(),
   } as unknown as Response;
 
+  const enrolledAt = new Date('2026-11-01T10:00:00.000Z');
+
+  const enrollment = {
+    id: 'enrollment-123',
+    studentId: 'student-123',
+    courseId: 'course-123',
+    status: EnrollmentStatus.NOT_STARTED,
+    completionPercentage: 0,
+    lessonsCompleted: 0,
+    lastActivityAt: null,
+    completedAt: null,
+    cancelledAt: null,
+    enrolledAt,
+    updatedAt: enrolledAt,
+  };
+
+  // The response hides studentId, cancelledAt and updatedAt.
+  const enrollmentResponse = {
+    id: 'enrollment-123',
+    courseId: 'course-123',
+    status: EnrollmentStatus.NOT_STARTED,
+    completionPercentage: 0,
+    lessonsCompleted: 0,
+    lastActivityAt: null,
+    completedAt: null,
+    enrolledAt,
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -35,12 +64,6 @@ describe('CourseEnrollmentController', () => {
   });
 
   it('should enroll a student in a course', async () => {
-    const enrollment = {
-      id: 'enrollment-123',
-      studentId: request.user.sub,
-      courseId: 'course-123',
-    };
-
     coordinator.enroll.mockResolvedValue({
       enrollment,
       created: true,
@@ -53,16 +76,10 @@ describe('CourseEnrollmentController', () => {
       'course-123',
     );
     expect(response.status).toHaveBeenCalledWith(HttpStatus.CREATED);
-    expect(result).toEqual(enrollment);
+    expect(result).toEqual(enrollmentResponse);
   });
 
   it('should return 200 for an existing enrollment', async () => {
-    const enrollment = {
-      id: 'enrollment-123',
-      studentId: request.user.sub,
-      courseId: 'course-123',
-    };
-
     coordinator.enroll.mockResolvedValue({
       enrollment,
       created: false,
@@ -71,7 +88,7 @@ describe('CourseEnrollmentController', () => {
     const result = await controller.enroll('course-123', request, response);
 
     expect(response.status).toHaveBeenCalledWith(HttpStatus.OK);
-    expect(result).toEqual(enrollment);
+    expect(result).toEqual(enrollmentResponse);
   });
 
   it('should propagate enrollment errors', async () => {
