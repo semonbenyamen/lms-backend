@@ -18,7 +18,6 @@ import { EnrollmentStatus } from '../../common/enums/enrollment-status.enum.js';
 
 @Entity('enrollments')
 @Unique('UQ_enrollments_student_course', ['studentId', 'courseId'])
-@Index('IDX_enrollments_course_id', ['courseId'])
 @Check(
   'CHK_enrollments_completion_percentage',
   '"completion_percentage" BETWEEN 0 AND 100',
@@ -40,15 +39,15 @@ export class Enrollment {
   @Column({ name: 'student_id', type: 'uuid' })
   studentId: string;
 
-  // Link each enrollment to an existing user.
   @ManyToOne(() => User, { nullable: false, onDelete: 'RESTRICT' })
   // Same FK names as the migration, so migration:generate finds no difference.
   @JoinColumn({
     name: 'student_id',
     foreignKeyConstraintName: 'FK_enrollments_student_id',
   })
-  student: User;
+  student: Relation<User>;
 
+  @Index('IDX_enrollments_course_id')
   @Column({ name: 'course_id', type: 'uuid' })
   courseId: string;
 
@@ -108,7 +107,6 @@ export class Enrollment {
   })
   cancelledAt: Date | null;
 
-  // Track when the enrollment was created or updated.
   @CreateDateColumn({
     name: 'enrolled_at',
     type: 'timestamptz',
