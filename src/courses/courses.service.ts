@@ -29,6 +29,7 @@ import { UpdateCourseDto } from './dto/update-course.dto.js';
 import { EnrollmentsService } from '../enrollments/enrollments.service.js';
 import { softDeleteSectionLessons } from '../lessons/soft-delete-section-lessons.js';
 import { Section } from '../sections/entities/section.entity.js';
+import { toSectionResponseDto } from '../sections/transformers/section-response.transformer.js';
 import { Course } from './entities/course.entity.js';
 import { toCourseResponseDto } from './transformers/course-response.transformer.js';
 
@@ -109,6 +110,55 @@ export class CoursesService {
     }
 
     return course;
+  }
+
+  // The public catalog: anyone can list the published courses.
+  async findPublished(
+    paginationQuery: PaginationQueryDto,
+  ): Promise<PaginatedResult<CourseResponseDto>> {
+    const { page, limit, skip, take } = getPaginationParams(paginationQuery);
+
+    const [items, total] = await this.courseWithCategoryQuery()
+      .where('course.isPublished = :isPublished', { isPublished: true })
+      .orderBy('course.createdAt', 'DESC')
+      .skip(skip)
+      .take(take)
+      .getManyAndCount();
+
+    return {
+      items: items.map(toCourseResponseDto),
+      meta: getPaginationMeta(total, page, limit),
+    };
+  }
+
+  // A published course with its sections, so a visitor sees the outline
+  // before enrolling. Lessons and content stay behind their own endpoints.
+  async getPublishedCourse(id: string): Promise<CourseResponseDto> {
+    const course = await this.courseWithCategoryQuery()
+      .leftJoinAndSelect('course.sections', 'section')
+      .where('course.id = :id', { id })
+      .andWhere('course.isPublished = :isPublished', { isPublished: true })
+      .orderBy('section.orderIndex', 'ASC')
+      .getOne();
+
+    // A draft answers 404 like a missing course, so its id stays hidden.
+    if (!course) {
+      throw new NotFoundException(`Course with ID ${id} not found`);
+    }
+
+    return {
+      ...toCourseResponseDto(course),
+      sections: course.sections.map(toSectionResponseDto),
+    };
+  }
+
+  // Ownership is verified by CourseOwnershipGuard before this runs.
+  async setPublished(id: string, isPublished: boolean): Promise<void> {
+    const course = await this.findCourseEntity(id);
+
+    course.isPublished = isPublished;
+
+    await this.coursesRepository.save(course);
   }
 
   // Ownership is verified by CourseOwnershipGuard before this runs.

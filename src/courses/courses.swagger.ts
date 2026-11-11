@@ -1,12 +1,16 @@
 import { applyDecorators, HttpStatus } from '@nestjs/common';
-import { ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiResponse } from '@nestjs/swagger';
 
-import { ApiAuthErrorResponses } from '../common/decorators/api-error-responses.decorator.js';
+import {
+  ApiAuthErrorResponses,
+  ApiErrorResponses,
+} from '../common/decorators/api-error-responses.decorator.js';
 import { ApiSuccessResponse } from '../common/decorators/api-success-response.decorator.js';
 import { UploadSignatureResponseDto } from '../common/cloudinary/dto/upload-signature-response.dto.js';
 import { ApiResponseDto } from '../common/dto/api-response.dto.js';
 import { IdResponseDto } from '../common/dto/id-response.dto.js';
 import { CourseResponseDto } from './dto/course-response.dto.js';
+import { UpdateCoursePublicationDto } from './dto/update-course-publication.dto.js';
 
 const NOT_COURSE_OWNER = 'Forbidden - not course owner or admin';
 
@@ -66,6 +70,55 @@ export const ApiUpdateCourse = () =>
         'Invalid request body, UUID format or uploaded thumbnail',
       [HttpStatus.FORBIDDEN]: NOT_COURSE_OWNER,
       [HttpStatus.NOT_FOUND]: 'Course or category not found',
+    }),
+  );
+
+export const ApiUpdateCoursePublication = () =>
+  applyDecorators(
+    ApiOperation({
+      summary:
+        'Publish a course to the catalog or take it back to draft (Course Owner or Admin)',
+    }),
+    ApiBody({
+      type: UpdateCoursePublicationDto,
+      examples: {
+        publish: { summary: 'Publish', value: { isPublished: true } },
+        unpublish: { summary: 'Unpublish', value: { isPublished: false } },
+      },
+    }),
+    ApiResponse({
+      status: HttpStatus.OK,
+      description: 'Course publication updated successfully',
+      type: ApiResponseDto,
+    }),
+    ApiAuthErrorResponses({
+      [HttpStatus.BAD_REQUEST]: 'Invalid UUID format or request body',
+      [HttpStatus.FORBIDDEN]: NOT_COURSE_OWNER,
+      [HttpStatus.NOT_FOUND]: 'Course not found',
+    }),
+  );
+
+// The catalog is public, so these endpoints have no 401 or 403.
+export const ApiListCatalogCourses = () =>
+  applyDecorators(
+    ApiOperation({ summary: 'List the published courses (Public)' }),
+    ApiSuccessResponse(CourseResponseDto, HttpStatus.OK, { isPaginated: true }),
+    ApiErrorResponses({
+      [HttpStatus.BAD_REQUEST]: 'Invalid pagination query parameters',
+    }),
+  );
+
+export const ApiGetCatalogCourse = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: 'Get a published course with its sections (Public)',
+      description:
+        'Lessons and their content are not included, they need an enrollment.',
+    }),
+    ApiSuccessResponse(CourseResponseDto, HttpStatus.OK),
+    ApiErrorResponses({
+      [HttpStatus.BAD_REQUEST]: 'Invalid UUID format',
+      [HttpStatus.NOT_FOUND]: 'Course not found or not published',
     }),
   );
 

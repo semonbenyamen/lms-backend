@@ -29,10 +29,12 @@ import {
   ApiGetCourse,
   ApiListCourses,
   ApiUpdateCourse,
+  ApiUpdateCoursePublication,
 } from './courses.swagger.js';
 import { CoursesService } from './courses.service.js';
 import { CourseResponseDto } from './dto/course-response.dto.js';
 import { CreateCourseDto } from './dto/create-course.dto.js';
+import { UpdateCoursePublicationDto } from './dto/update-course-publication.dto.js';
 import { UpdateCourseDto } from './dto/update-course.dto.js';
 import { CourseOwnershipGuard } from './guards/course-ownership.guard.js';
 
@@ -78,6 +80,20 @@ export class CoursesController {
     @Body() updateCourseDto: UpdateCourseDto,
   ): Promise<void> {
     return this.coursesService.update(id, updateCourseDto);
+  }
+
+  // One endpoint publishes and unpublishes, like the assessments.
+  @Patch(':id/publication')
+  @UseGuards(CourseOwnershipGuard)
+  @ApiUpdateCoursePublication()
+  updatePublication(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() updatePublicationDto: UpdateCoursePublicationDto,
+  ): Promise<void> {
+    return this.coursesService.setPublished(
+      id,
+      updatePublicationDto.isPublished,
+    );
   }
 
   // Signing an image upload creates nothing here, so it returns 200.

@@ -285,6 +285,131 @@ describe('CoursesService', () => {
     });
   });
 
+  describe('Course Catalog', () => {
+    let catalogQueryBuilder: Record<string, ReturnType<typeof vi.fn>>;
+
+    beforeEach(() => {
+      catalogQueryBuilder = {
+        leftJoin: vi.fn().mockReturnThis(),
+        leftJoinAndSelect: vi.fn().mockReturnThis(),
+        addSelect: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        andWhere: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        skip: vi.fn().mockReturnThis(),
+        take: vi.fn().mockReturnThis(),
+        getManyAndCount: vi.fn().mockResolvedValue([[], 0]),
+        getOne: vi.fn(),
+      };
+      mockCoursesRepo.createQueryBuilder.mockReturnValue(catalogQueryBuilder);
+    });
+
+    it('should list only the published courses, newest first', async () => {
+      catalogQueryBuilder.getManyAndCount.mockResolvedValue([
+        [courseEntity('course-1')],
+        1,
+      ]);
+
+      const result = await service.findPublished({ page: 1, limit: 10 });
+
+      expect(catalogQueryBuilder.where).toHaveBeenCalledWith(
+        'course.isPublished = :isPublished',
+        { isPublished: true },
+      );
+      expect(catalogQueryBuilder.orderBy).toHaveBeenCalledWith(
+        'course.createdAt',
+        'DESC',
+      );
+      expect(result.items).toEqual([courseResponse('course-1')]);
+      expect(result.meta.total).toBe(1);
+    });
+
+    it('should return a published course with its ordered sections', async () => {
+      catalogQueryBuilder.getOne.mockResolvedValue({
+        ...courseEntity('course-1'),
+        sections: [
+          {
+            id: 'section-1',
+            courseId: 'course-1',
+            title: 'Chapter 1',
+            orderIndex: 1,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            deletedAt: null,
+            lessons: [],
+          },
+        ],
+      });
+
+      const result = await service.getPublishedCourse('course-1');
+
+      expect(catalogQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'course.isPublished = :isPublished',
+        { isPublished: true },
+      );
+      expect(catalogQueryBuilder.orderBy).toHaveBeenCalledWith(
+        'section.orderIndex',
+        'ASC',
+      );
+      expect(result).toEqual({
+        ...courseResponse('course-1'),
+        sections: [
+          {
+            id: 'section-1',
+            courseId: 'course-1',
+            title: 'Chapter 1',
+            orderIndex: 1,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          },
+        ],
+      });
+    });
+
+    it('should answer 404 for a draft or missing course', async () => {
+      catalogQueryBuilder.getOne.mockResolvedValue(null);
+
+      await expect(service.getPublishedCourse('course-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('Course Publishing', () => {
+    it('should publish the course', async () => {
+      mockCoursesRepo.findOne.mockResolvedValue(courseEntity('course-1'));
+
+      await expect(
+        service.setPublished('course-1', true),
+      ).resolves.toBeUndefined();
+      expect(mockCoursesRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'course-1', isPublished: true }),
+      );
+    });
+
+    it('should unpublish the course', async () => {
+      mockCoursesRepo.findOne.mockResolvedValue({
+        ...courseEntity('course-1'),
+        isPublished: true,
+      });
+
+      await service.setPublished('course-1', false);
+
+      expect(mockCoursesRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'course-1', isPublished: false }),
+      );
+    });
+
+    it('should reject a course that does not exist', async () => {
+      mockCoursesRepo.findOne.mockResolvedValue(null);
+
+      await expect(service.setPublished('course-1', true)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(mockCoursesRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Course Retrieval by ID', () => {
     it('should return the course details without internal fields', async () => {
       courseQueryBuilder.getOne.mockResolvedValueOnce(courseEntity('course-1'));

@@ -20,6 +20,7 @@ describe('CoursesController', () => {
     getCourse: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
+    setPublished: vi.fn(),
     createThumbnailSignature: vi.fn(),
   };
 
@@ -139,6 +140,21 @@ describe('CoursesController', () => {
     });
     expect(result).toBeUndefined();
   });
+
+  it.each([true, false])(
+    'should set isPublished to %s without returning data',
+    async (isPublished) => {
+      mockCoursesService.setPublished.mockResolvedValue(undefined);
+
+      await expect(
+        controller.updatePublication('c-1', { isPublished }),
+      ).resolves.toBeUndefined();
+      expect(mockCoursesService.setPublished).toHaveBeenCalledWith(
+        'c-1',
+        isPublished,
+      );
+    },
+  );
 
   it('should remove course through service', async () => {
     mockCoursesService.remove.mockResolvedValue(undefined);
