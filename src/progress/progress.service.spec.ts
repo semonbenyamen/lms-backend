@@ -9,7 +9,6 @@ import type { DataSource, Repository } from 'typeorm';
 import { ContentType } from '../common/enums/content-type.enum.js';
 import { ContentsService } from '../contents/contents.service.js';
 import { EnrollmentsService } from '../enrollments/enrollments.service.js';
-import { CoursesService } from '../courses/courses.service.js';
 import { ContentProgress } from './entities/content-progress.entity.js';
 import { ContentProgressHistory } from './entities/content-progress-history.entity.js';
 import { ProgressService } from './progress.service.js';
@@ -32,15 +31,17 @@ describe('ProgressService', () => {
     id: 'enrollment-id',
     courseId,
     cancelledAt: null,
+    course: { id: courseId, isPublished: true },
+  };
+
+  const draftEnrollment = {
+    ...enrollment,
+    course: { id: courseId, isPublished: false },
   };
 
   const contentsService = {
     findProgressContentReference: vi.fn(),
     contentExists: vi.fn(),
-  };
-
-  const coursesService = {
-    findPublishedById: vi.fn(),
   };
 
   const enrollmentsService = {
@@ -78,11 +79,6 @@ describe('ProgressService', () => {
     contentsService.findProgressContentReference.mockResolvedValue(content);
     contentsService.contentExists.mockResolvedValue(true);
 
-    coursesService.findPublishedById.mockResolvedValue({
-      id: courseId,
-      isPublished: true,
-    });
-
     enrollmentsService.findActiveEnrollmentByContent.mockResolvedValue(
       enrollment,
     );
@@ -111,7 +107,6 @@ describe('ProgressService', () => {
       progress as unknown as Repository<ContentProgress>,
       contentsService as unknown as ContentsService,
       enrollmentsService as unknown as EnrollmentsService,
-      coursesService as unknown as CoursesService,
       dataSource as unknown as DataSource,
       courseProgress as unknown as CourseProgressService,
     );
@@ -128,8 +123,8 @@ describe('ProgressService', () => {
   });
 
   it('hides unpublished content', async () => {
-    coursesService.findPublishedById.mockRejectedValue(
-      new NotFoundException('Content not found or unpublished'),
+    enrollmentsService.findActiveEnrollmentByContent.mockResolvedValue(
+      draftEnrollment,
     );
 
     await expect(service.getProgress(studentId, contentId)).rejects.toThrow(
@@ -326,13 +321,12 @@ describe('ProgressService', () => {
     );
 
     expect(contentsService.findProgressContentReference).not.toHaveBeenCalled();
-    expect(coursesService.findPublishedById).not.toHaveBeenCalled();
     expect(progress.findOne).not.toHaveBeenCalled();
   });
 
   it('checks enrollment before rejecting unpublished content', async () => {
-    coursesService.findPublishedById.mockRejectedValue(
-      new NotFoundException('Content not found or unpublished'),
+    enrollmentsService.findActiveEnrollmentByContent.mockResolvedValue(
+      draftEnrollment,
     );
 
     await expect(service.getProgress(studentId, contentId)).rejects.toThrow(

@@ -13,7 +13,6 @@ import {
   ProgressContentReference,
 } from '../contents/contents.service.js';
 import { EnrollmentsService } from '../enrollments/enrollments.service.js';
-import { CoursesService } from '../courses/courses.service.js';
 import { Enrollment } from '../enrollments/entities/enrollment.entity.js';
 import { ContentProgressResponseDto } from './dto/content-progress-response.dto.js';
 import { UpdateContentProgressDto } from './dto/update-content-progress.dto.js';
@@ -29,13 +28,13 @@ export class ProgressService {
     private readonly progressRepository: Repository<ContentProgress>,
     private readonly contentsService: ContentsService,
     private readonly enrollmentsService: EnrollmentsService,
-    private readonly coursesService: CoursesService,
     private readonly dataSource: DataSource,
     private readonly courseProgressService: CourseProgressService,
   ) {}
 
   // Missing or deleted content is a 404, existing content without an
-  // enrollment is a 403. Content metadata is still not loaded here.
+  // enrollment is a 403, and a draft course looks missing. The course comes
+  // with the enrollment, so content metadata is still not loaded here.
   private async findEnrollmentOrFail(
     studentId: string,
     contentId: string,
@@ -47,6 +46,12 @@ export class ProgressService {
       );
 
     if (enrollment) {
+      if (!enrollment.course.isPublished) {
+        throw new NotFoundException(
+          `Course with ID ${enrollment.courseId} not found`,
+        );
+      }
+
       return enrollment;
     }
 
@@ -74,9 +79,6 @@ export class ProgressService {
     const content =
       await this.contentsService.findProgressContentReference(contentId);
 
-    // Verify that the course is published.
-    await this.coursesService.findPublishedById(content.courseId);
-
     return { content, enrollment };
   }
 
@@ -86,9 +88,6 @@ export class ProgressService {
     contentId: string,
   ): Promise<ContentProgressResponseDto> {
     const enrollment = await this.findEnrollmentOrFail(studentId, contentId);
-
-    // Verify course publication without fetching content metadata.
-    await this.coursesService.findPublishedById(enrollment.courseId);
 
     const progress = await this.progressRepository.findOne({
       where: {

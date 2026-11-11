@@ -56,6 +56,7 @@ export class EnrollmentsService {
   ): Promise<Enrollment | null> {
     return this.enrollmentsRepository
       .createQueryBuilder('enrollment')
+      .innerJoinAndSelect('enrollment.course', 'course')
       .innerJoin(
         ContentItem,
         'content',

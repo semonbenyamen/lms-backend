@@ -32,6 +32,7 @@ describe('EnrollmentsService', () => {
 
   // Reaches the course of a content through its lesson and section.
   const contentQueryBuilder = {
+    innerJoinAndSelect: vi.fn(),
     innerJoin: vi.fn(),
     where: vi.fn(),
     andWhere: vi.fn(),
@@ -53,6 +54,7 @@ describe('EnrollmentsService', () => {
     enrollmentsRepository.createQueryBuilder.mockReturnValue(
       contentQueryBuilder,
     );
+    contentQueryBuilder.innerJoinAndSelect.mockReturnThis();
     contentQueryBuilder.innerJoin.mockReturnThis();
     contentQueryBuilder.where.mockReturnThis();
     contentQueryBuilder.andWhere.mockReturnThis();
@@ -90,6 +92,11 @@ describe('EnrollmentsService', () => {
       service.findActiveEnrollmentByContent(studentId, 'content-1'),
     ).resolves.toBe(existingEnrollment);
 
+    // The course comes in the same query, for the publication check.
+    expect(contentQueryBuilder.innerJoinAndSelect).toHaveBeenCalledWith(
+      'enrollment.course',
+      'course',
+    );
     expect(contentQueryBuilder.innerJoin).toHaveBeenCalledWith(
       ContentItem,
       'content',

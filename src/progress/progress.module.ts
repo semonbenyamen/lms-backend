@@ -5,7 +5,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module.js';
 import { ContentsModule } from '../contents/contents.module.js';
 import { ContentItem } from '../contents/entities/content-item.entity.js';
-import { CoursesModule } from '../courses/courses.module.js';
 import { Course } from '../courses/entities/course.entity.js';
 import { EnrollmentsModule } from '../enrollments/enrollments.module.js';
 import { Enrollment } from '../enrollments/entities/enrollment.entity.js';
@@ -29,7 +28,6 @@ import { ProgressService } from './progress.service.js';
     AuthModule,
     ContentsModule,
     EnrollmentsModule,
-    CoursesModule,
   ],
   controllers: [ProgressController, CourseProgressController],
   providers: [ProgressService, CourseProgressService],
