@@ -3,6 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, IsNull, Repository } from 'typeorm';
 
 import { EnrollmentStatus } from '../common/enums/enrollment-status.enum.js';
+import { ContentItem } from '../contents/entities/content-item.entity.js';
+import { Lesson } from '../lessons/entities/lesson.entity.js';
+import { Section } from '../sections/entities/section.entity.js';
 import { Enrollment } from './entities/enrollment.entity.js';
 
 @Injectable()
@@ -25,6 +28,34 @@ export class EnrollmentsService {
     });
 
     return count > 0;
+  }
+
+  // Check if a student is actively enrolled in a course.
+  async hasActiveEnrollment(
+    studentId: string,
+    courseId: string,
+  ): Promise<boolean> {
+    return this.enrollmentsRepository.exists({
+      where: { studentId, courseId, cancelledAt: IsNull() },
+    });
+  }
+
+  // Find the student's active enrollment in the course that owns the content.
+  // The course is reached through the lesson and section, and joins skip
+  // soft-deleted rows, so deleted content has no enrollment.
+  async findActiveEnrollmentByContent(
+    studentId: string,
+    contentId: string,
+  ): Promise<Enrollment | null> {
+    return this.enrollmentsRepository
+      .createQueryBuilder('enrollment')
+      .innerJoin(Section, 'section', 'section.courseId = enrollment.courseId')
+      .innerJoin(Lesson, 'lesson', 'lesson.sectionId = section.id')
+      .innerJoin(ContentItem, 'content', 'content.lessonId = lesson.id')
+      .where('enrollment.studentId = :studentId', { studentId })
+      .andWhere('content.id = :contentId', { contentId })
+      .andWhere('enrollment.cancelledAt IS NULL')
+      .getOne();
   }
 
   // Create an enrollment or return the existing one.

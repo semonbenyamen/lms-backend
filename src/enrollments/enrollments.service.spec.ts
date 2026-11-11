@@ -1,8 +1,10 @@
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EntityManager, IsNull, Repository } from 'typeorm';
 
 import { EnrollmentStatus } from '../common/enums/enrollment-status.enum.js';
+import { ContentItem } from '../contents/entities/content-item.entity.js';
+import { Lesson } from '../lessons/entities/lesson.entity.js';
+import { Section } from '../sections/entities/section.entity.js';
 import { Enrollment } from './entities/enrollment.entity.js';
 import { EnrollmentsService } from './enrollments.service.js';
 
@@ -26,6 +28,16 @@ describe('EnrollmentsService', () => {
     create: vi.fn(),
     save: vi.fn(),
     count: vi.fn(),
+    exists: vi.fn(),
+    createQueryBuilder: vi.fn(),
+  };
+
+  // Reaches the course of a content through its lesson and section.
+  const contentQueryBuilder = {
+    innerJoin: vi.fn(),
+    where: vi.fn(),
+    andWhere: vi.fn(),
+    getOne: vi.fn(),
   };
 
   const manager = {
@@ -40,6 +52,54 @@ describe('EnrollmentsService', () => {
     );
 
     manager.getRepository.mockReturnValue(enrollmentsRepository);
+    enrollmentsRepository.createQueryBuilder.mockReturnValue(
+      contentQueryBuilder,
+    );
+    contentQueryBuilder.innerJoin.mockReturnThis();
+    contentQueryBuilder.where.mockReturnThis();
+    contentQueryBuilder.andWhere.mockReturnThis();
+  });
+
+  it('should check an active enrollment in a course', async () => {
+    enrollmentsRepository.exists.mockResolvedValue(true);
+
+    await expect(
+      service.hasActiveEnrollment(studentId, courseId),
+    ).resolves.toBe(true);
+    expect(enrollmentsRepository.exists).toHaveBeenCalledWith({
+      where: { studentId, courseId, cancelledAt: IsNull() },
+    });
+  });
+
+  it('should find the active enrollment in the course that owns a content', async () => {
+    contentQueryBuilder.getOne.mockResolvedValue(existingEnrollment);
+
+    await expect(
+      service.findActiveEnrollmentByContent(studentId, 'content-1'),
+    ).resolves.toBe(existingEnrollment);
+
+    expect(contentQueryBuilder.innerJoin).toHaveBeenCalledWith(
+      Section,
+      'section',
+      'section.courseId = enrollment.courseId',
+    );
+    expect(contentQueryBuilder.innerJoin).toHaveBeenCalledWith(
+      Lesson,
+      'lesson',
+      'lesson.sectionId = section.id',
+    );
+    expect(contentQueryBuilder.innerJoin).toHaveBeenCalledWith(
+      ContentItem,
+      'content',
+      'content.lessonId = lesson.id',
+    );
+    expect(contentQueryBuilder.andWhere).toHaveBeenCalledWith(
+      'content.id = :contentId',
+      { contentId: 'content-1' },
+    );
+    expect(contentQueryBuilder.andWhere).toHaveBeenCalledWith(
+      'enrollment.cancelledAt IS NULL',
+    );
   });
 
   it('should create a new enrollment', async () => {
@@ -119,10 +179,7 @@ describe('EnrollmentsService', () => {
   it('should find an existing enrollment', async () => {
     enrollmentsRepository.findOne.mockResolvedValue(existingEnrollment);
 
-    const result = await service.findExistingEnrollment(
-      studentId,
-      courseId,
-    );
+    const result = await service.findExistingEnrollment(studentId, courseId);
 
     expect(result).toEqual(existingEnrollment);
     expect(enrollmentsRepository.findOne).toHaveBeenCalledWith({
@@ -133,10 +190,7 @@ describe('EnrollmentsService', () => {
   it('should return null when enrollment does not exist', async () => {
     enrollmentsRepository.findOne.mockResolvedValue(null);
 
-    const result = await service.findExistingEnrollment(
-      studentId,
-      courseId,
-    );
+    const result = await service.findExistingEnrollment(studentId, courseId);
 
     expect(result).toBeNull();
   });

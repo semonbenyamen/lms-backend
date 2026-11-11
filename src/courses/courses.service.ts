@@ -233,6 +233,19 @@ export class CoursesService {
     }
   }
 
+  // Returns the entity of a published course, a draft looks missing.
+  async findPublishedById(id: string): Promise<Course> {
+    const course = await this.coursesRepository.findOne({
+      where: { id, isPublished: true },
+    });
+
+    if (!course) {
+      throw new NotFoundException(`Course with ID ${id} not found`);
+    }
+
+    return course;
+  }
+
   // A shared lock: a running delete makes the enrollment wait, while
   // students enrolling in the same course do not wait for each other.
   async findPublishedCourseForEnrollment(

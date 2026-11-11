@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -17,6 +18,9 @@ import { UploadSignatureResponseDto } from '../common/cloudinary/dto/upload-sign
 import { isUniqueViolation } from '../common/database/is-unique-violation.js';
 import { CloudinaryResourceType } from '../common/enums/cloudinary-resource-type.enum.js';
 import { ContentType } from '../common/enums/content-type.enum.js';
+import { UserRole } from '../common/enums/user-role.enum.js';
+import { Course } from '../courses/entities/course.entity.js';
+import { EnrollmentsService } from '../enrollments/enrollments.service.js';
 import { LessonsService } from '../lessons/lessons.service.js';
 import {
   getTypeFieldError,
@@ -67,6 +71,7 @@ export class ContentsService {
     private readonly contentItemsRepository: Repository<ContentItem>,
     private readonly lessonsService: LessonsService,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly enrollmentsService: EnrollmentsService,
   ) {}
 
   // Ownership of the lesson is verified by ContentOwnershipGuard before this runs.
@@ -109,10 +114,11 @@ export class ContentsService {
       contentItem.lessonId,
     );
 
-    // A draft course's content looks missing to users who cannot read it.
-    if (!canReadCourse(lesson.section.course, user)) {
-      throw new NotFoundException(`Content item with ID ${id} not found`);
-    }
+    await this.assertCanReadContent(
+      lesson.section.course,
+      user,
+      `Content item with ID ${id} not found`,
+    );
 
     return toContentItemResponseDto(contentItem);
   }
@@ -123,9 +129,11 @@ export class ContentsService {
   ): Promise<ContentItemResponseDto[]> {
     const lesson = await this.lessonsService.findLessonWithCourse(lessonId);
 
-    if (!canReadCourse(lesson.section.course, user)) {
-      throw new NotFoundException(`Lesson with ID ${lessonId} not found`);
-    }
+    await this.assertCanReadContent(
+      lesson.section.course,
+      user,
+      `Lesson with ID ${lessonId} not found`,
+    );
 
     // A lesson has few items, so they are returned in one ordered list.
     const contentItems = await this.contentItemsRepository.find({
@@ -174,7 +182,44 @@ export class ContentsService {
     await this.contentItemsRepository.softRemove(contentItem);
   }
 
+  // The progress needs the type, the video length and the course of a content.
+  async findProgressContentReference(
+    id: string,
+  ): Promise<
+    Pick<ContentItem, 'contentType' | 'durationSeconds'> & { courseId: string }
+  > {
+    const contentItem = await this.findContentItemEntity(id);
+    const lesson = await this.lessonsService.findLessonWithCourse(
+      contentItem.lessonId,
+    );
+
+    return {
+      contentType: contentItem.contentType,
+      durationSeconds: contentItem.durationSeconds,
+      courseId: lesson.section.course.id,
+    };
+  }
+
   // --- Helper Methods ---
+
+  // A draft course's content looks missing to users who cannot read it.
+  // Students see the lesson names, but its content only after enrolling.
+  private async assertCanReadContent(
+    course: Course,
+    user: Pick<JwtPayload, 'sub' | 'role'>,
+    notFoundMessage: string,
+  ): Promise<void> {
+    if (!canReadCourse(course, user)) {
+      throw new NotFoundException(notFoundMessage);
+    }
+
+    if (
+      user.role === UserRole.STUDENT &&
+      !(await this.enrollmentsService.hasActiveEnrollment(user.sub, course.id))
+    ) {
+      throw new ForbiddenException('Student enrollment required');
+    }
+  }
 
   // A unique index clash is a 409, not a 500.
   private async saveContentItem(contentItem: ContentItem): Promise<void> {

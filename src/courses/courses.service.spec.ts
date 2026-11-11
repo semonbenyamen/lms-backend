@@ -484,6 +484,26 @@ describe('CoursesService', () => {
     });
   });
 
+  describe('Published Course Lookup', () => {
+    it('should return a published course', async () => {
+      const course = courseEntity('course-1');
+      mockCoursesRepo.findOne.mockResolvedValue(course);
+
+      await expect(service.findPublishedById('course-1')).resolves.toBe(course);
+      expect(mockCoursesRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 'course-1', isPublished: true },
+      });
+    });
+
+    it('should answer 404 for a draft or missing course', async () => {
+      mockCoursesRepo.findOne.mockResolvedValue(null);
+
+      await expect(service.findPublishedById('course-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
   describe('Course Retrieval by ID', () => {
     it('should return the course details without internal fields', async () => {
       courseQueryBuilder.getOne.mockResolvedValueOnce(courseEntity('course-1'));
