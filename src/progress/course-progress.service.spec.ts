@@ -23,12 +23,25 @@ describe('CourseProgressService', () => {
   } as unknown as Enrollment;
   const content = (id: string, lessonId: string) => ({ id, lessonId });
 
-  const progress = { find: vi.fn() };
-  const contentsService = { findCourseContentLessons: vi.fn() };
+  const progress = { find: vi.fn(), createQueryBuilder: vi.fn() };
+  const completedQuery = {
+    innerJoin: vi.fn().mockReturnThis(),
+    select: vi.fn().mockReturnThis(),
+    addSelect: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    andWhere: vi.fn().mockReturnThis(),
+    groupBy: vi.fn().mockReturnThis(),
+    getRawMany: vi.fn(),
+  };
+  const contentsService = {
+    findCourseContentLessons: vi.fn(),
+    countCourseContents: vi.fn(),
+  };
   const coursesService = { findById: vi.fn() };
   const enrollmentsService = {
     findActiveEnrollment: vi.fn(),
     updateProgressSummary: vi.fn(),
+    findStudentEnrollments: vi.fn(),
   };
   const manager = {
     getRepository: vi.fn(() => progress),
@@ -37,6 +50,7 @@ describe('CourseProgressService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    progress.createQueryBuilder.mockReturnValue(completedQuery);
     enrollmentsService.findActiveEnrollment.mockResolvedValue(enrollment);
     contentsService.findCourseContentLessons.mockResolvedValue([
       content('a', 'lesson-1'),
@@ -65,6 +79,7 @@ describe('CourseProgressService', () => {
         lessonsCompleted: 1,
         totalContents: 3,
         completedContents: 2,
+        completedContentIds: ['a', 'b'],
         completionPercentage: 66.67,
         isCompleted: false,
       });
@@ -141,6 +156,111 @@ describe('CourseProgressService', () => {
       await expect(
         service.getCourseProgress(studentId, courseId),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('findMyEnrollments', () => {
+    const course = (id: string, isPublished = true) => ({
+      id,
+      title: `Course ${id}`,
+      thumbnailUrl: null,
+      isPublished,
+    });
+    const enrolledAt = new Date('2026-11-01T10:00:00.000Z');
+    const myEnrollment = (
+      id: string,
+      courseIdValue: string,
+      isPublished = true,
+    ) =>
+      ({
+        id,
+        courseId: courseIdValue,
+        status: EnrollmentStatus.NOT_STARTED,
+        completionPercentage: 0,
+        lastActivityAt: null,
+        enrolledAt,
+        course: course(courseIdValue, isPublished),
+      }) as unknown as Enrollment;
+
+    it('calculates the live progress of every course on the page', async () => {
+      enrollmentsService.findStudentEnrollments.mockResolvedValue([
+        [
+          myEnrollment('e-1', 'c-1'),
+          myEnrollment('e-2', 'c-2', false),
+          myEnrollment('e-3', 'c-3'),
+        ],
+        13,
+      ]);
+      contentsService.countCourseContents.mockResolvedValue(
+        new Map([
+          ['c-1', 3],
+          ['c-2', 4],
+        ]),
+      );
+      completedQuery.getRawMany.mockResolvedValue([
+        { enrollmentId: 'e-1', completed: '3' },
+        { enrollmentId: 'e-2', completed: '1' },
+      ]);
+
+      const result = await service.findMyEnrollments(studentId, {
+        page: 2,
+        limit: 10,
+      });
+
+      expect(enrollmentsService.findStudentEnrollments).toHaveBeenCalledWith(
+        studentId,
+        10,
+        10,
+      );
+      expect(contentsService.countCourseContents).toHaveBeenCalledWith([
+        'c-1',
+        'c-2',
+        'c-3',
+      ]);
+      expect(completedQuery.where).toHaveBeenCalledWith(
+        'progress.enrollmentId IN (:...enrollmentIds)',
+        { enrollmentIds: ['e-1', 'e-2', 'e-3'] },
+      );
+      expect(result.items).toEqual([
+        {
+          id: 'e-1',
+          status: EnrollmentStatus.COMPLETED,
+          completionPercentage: 100,
+          lastActivityAt: null,
+          enrolledAt,
+          course: course('c-1'),
+        },
+        {
+          id: 'e-2',
+          status: EnrollmentStatus.IN_PROGRESS,
+          completionPercentage: 25,
+          lastActivityAt: null,
+          enrolledAt,
+          course: course('c-2', false),
+        },
+        {
+          // A course without content is not started, not completed.
+          id: 'e-3',
+          status: EnrollmentStatus.NOT_STARTED,
+          completionPercentage: 0,
+          lastActivityAt: null,
+          enrolledAt,
+          course: course('c-3'),
+        },
+      ]);
+      expect(result.meta).toEqual(
+        expect.objectContaining({ total: 13, page: 2, limit: 10 }),
+      );
+    });
+
+    it('does not count progress for an empty page', async () => {
+      enrollmentsService.findStudentEnrollments.mockResolvedValue([[], 0]);
+      contentsService.countCourseContents.mockResolvedValue(new Map());
+
+      const result = await service.findMyEnrollments(studentId, {});
+
+      expect(result.items).toEqual([]);
+      expect(progress.createQueryBuilder).not.toHaveBeenCalled();
     });
   });
 

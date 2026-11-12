@@ -9,6 +9,7 @@ import { CourseProgressController } from './course-progress.controller.js';
 import { CourseProgressService } from './course-progress.service.js';
 import { ContentProgressHistory } from './entities/content-progress-history.entity.js';
 import { ContentProgress } from './entities/content-progress.entity.js';
+import { MyEnrollmentsController } from './my-enrollments.controller.js';
 import { ProgressController } from './progress.controller.js';
 import { ProgressService } from './progress.service.js';
 
@@ -20,7 +21,11 @@ import { ProgressService } from './progress.service.js';
     CoursesModule,
     EnrollmentsModule,
   ],
-  controllers: [ProgressController, CourseProgressController],
+  controllers: [
+    ProgressController,
+    CourseProgressController,
+    MyEnrollmentsController,
+  ],
   providers: [ProgressService, CourseProgressService],
 })
 export class ProgressModule {}

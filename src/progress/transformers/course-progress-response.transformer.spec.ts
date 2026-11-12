@@ -10,6 +10,7 @@ describe('toCourseProgressResponseDto', () => {
       lessonsCompleted: 1,
       totalContents: 3,
       completedContents: 2,
+      completedContentIds: ['content-1', 'content-2'],
       completionPercentage: 66.67,
       isCompleted: false,
       enrollmentId: 'enrollment-1',
@@ -21,6 +22,7 @@ describe('toCourseProgressResponseDto', () => {
       lessonsCompleted: 1,
       totalContents: 3,
       completedContents: 2,
+      completedContentIds: ['content-1', 'content-2'],
       completionPercentage: 66.67,
       isCompleted: false,
     });
