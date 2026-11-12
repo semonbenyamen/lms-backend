@@ -50,4 +50,9 @@ export class CourseEnrollmentCoordinator {
       throw error;
     }
   }
+
+  // The progress stays, so it comes back if the student enrolls again.
+  async cancel(studentId: string, courseId: string): Promise<void> {
+    await this.enrollmentsService.cancelEnrollment(studentId, courseId);
+  }
 }

@@ -13,6 +13,7 @@ describe('CourseEnrollmentController', () => {
 
   const coordinator = {
     enroll: vi.fn(),
+    cancel: vi.fn(),
   };
 
   const request = {
@@ -89,6 +90,18 @@ describe('CourseEnrollmentController', () => {
 
     expect(response.status).toHaveBeenCalledWith(HttpStatus.OK);
     expect(result).toEqual(enrollmentResponse);
+  });
+
+  it('should cancel the enrollment of the signed in student', async () => {
+    coordinator.cancel.mockResolvedValue(undefined);
+
+    await expect(
+      controller.cancel('course-123', request),
+    ).resolves.toBeUndefined();
+    expect(coordinator.cancel).toHaveBeenCalledWith(
+      request.user.sub,
+      'course-123',
+    );
   });
 
   it('should propagate enrollment errors', async () => {

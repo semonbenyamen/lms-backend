@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EntityManager, IsNull, Repository } from 'typeorm';
 
@@ -27,6 +28,8 @@ describe('EnrollmentsService', () => {
     save: vi.fn(),
     count: vi.fn(),
     exists: vi.fn(),
+    update: vi.fn(),
+    findAndCount: vi.fn(),
     createQueryBuilder: vi.fn(),
   };
 
@@ -191,6 +194,67 @@ describe('EnrollmentsService', () => {
 
     expect(enrollmentsRepository.create).not.toHaveBeenCalled();
     expect(enrollmentsRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('should reactivate a cancelled enrollment with its progress', async () => {
+    const cancelled = {
+      ...existingEnrollment,
+      completionPercentage: 40,
+      cancelledAt: new Date('2026-11-01T10:00:00.000Z'),
+    } as Enrollment;
+    enrollmentsRepository.findOne.mockResolvedValue(cancelled);
+    enrollmentsRepository.save.mockImplementation(
+      async (enrollment: Enrollment) => enrollment,
+    );
+
+    const result = await service.createOrFindEnrollment(
+      studentId,
+      courseId,
+      manager as unknown as EntityManager,
+    );
+
+    expect(result.created).toBe(true);
+    expect(result.enrollment.cancelledAt).toBeNull();
+    expect(result.enrollment.completionPercentage).toBe(40);
+    expect(enrollmentsRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('should cancel the active enrollment of a student', async () => {
+    enrollmentsRepository.update.mockResolvedValue({ affected: 1 });
+
+    await expect(
+      service.cancelEnrollment(studentId, courseId),
+    ).resolves.toBeUndefined();
+    expect(enrollmentsRepository.update).toHaveBeenCalledWith(
+      { studentId, courseId, cancelledAt: IsNull() },
+      { cancelledAt: expect.any(Date) },
+    );
+  });
+
+  it('should return 404 when there is no active enrollment to cancel', async () => {
+    enrollmentsRepository.update.mockResolvedValue({ affected: 0 });
+
+    await expect(service.cancelEnrollment(studentId, courseId)).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it('should find a page of the active enrollments of a student', async () => {
+    enrollmentsRepository.findAndCount.mockResolvedValue([
+      [existingEnrollment],
+      1,
+    ]);
+
+    await expect(
+      service.findStudentEnrollments(studentId, 10, 10),
+    ).resolves.toEqual([[existingEnrollment], 1]);
+    expect(enrollmentsRepository.findAndCount).toHaveBeenCalledWith({
+      where: { studentId, cancelledAt: IsNull() },
+      relations: { course: true },
+      order: { enrolledAt: 'DESC', id: 'ASC' },
+      skip: 10,
+      take: 10,
+    });
   });
 
   it('should detect active enrollments', async () => {

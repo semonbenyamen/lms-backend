@@ -20,6 +20,7 @@ describe('CourseEnrollmentCoordinator', () => {
   const enrollmentsService = {
     createOrFindEnrollment: vi.fn(),
     findExistingEnrollment: vi.fn(),
+    cancelEnrollment: vi.fn(),
   };
 
   let coordinator: CourseEnrollmentCoordinator;
@@ -58,6 +59,18 @@ describe('CourseEnrollmentCoordinator', () => {
       studentId,
       courseId,
       manager,
+    );
+  });
+
+  it('should cancel the enrollment of the student', async () => {
+    enrollmentsService.cancelEnrollment.mockResolvedValue(undefined);
+
+    await expect(
+      coordinator.cancel(studentId, courseId),
+    ).resolves.toBeUndefined();
+    expect(enrollmentsService.cancelEnrollment).toHaveBeenCalledWith(
+      studentId,
+      courseId,
     );
   });
 
