@@ -122,9 +122,8 @@ export const ApiListCatalogCourses = () =>
 export const ApiGetCatalogCourse = () =>
   applyDecorators(
     ApiOperation({
-      summary: 'Get a published course with its sections (Public)',
-      description:
-        'Lessons and their content are not included, they need an enrollment.',
+      summary: 'Get a published course with its sections and lessons (Public)',
+      description: 'Content is not included, it needs an enrollment.',
     }),
     ApiSuccessResponse(CourseResponseDto, HttpStatus.OK),
     ApiErrorResponses({

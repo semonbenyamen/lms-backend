@@ -31,6 +31,7 @@ import { UpdateCoursePublicationDto } from './dto/update-course-publication.dto.
 import { UpdateCourseDto } from './dto/update-course.dto.js';
 import { EnrollmentsService } from '../enrollments/enrollments.service.js';
 import { softDeleteSectionLessons } from '../lessons/soft-delete-section-lessons.js';
+import { toLessonResponseDto } from '../lessons/transformers/lesson-response.transformer.js';
 import { Section } from '../sections/entities/section.entity.js';
 import { toSectionResponseDto } from '../sections/transformers/section-response.transformer.js';
 import { Course } from './entities/course.entity.js';
@@ -134,14 +135,16 @@ export class CoursesService {
     };
   }
 
-  // A published course with its sections, so a visitor sees the outline
-  // before enrolling. Lessons and content stay behind their own endpoints.
+  // A published course with its sections and lesson titles, so a visitor sees
+  // the outline before enrolling. Content stays behind the enrollment.
   async getPublishedCourse(id: string): Promise<CourseResponseDto> {
     const course = await this.courseWithCategoryQuery()
       .leftJoinAndSelect('course.sections', 'section')
+      .leftJoinAndSelect('section.lessons', 'lesson')
       .where('course.id = :id', { id })
       .andWhere('course.isPublished = :isPublished', { isPublished: true })
       .orderBy('section.orderIndex', 'ASC')
+      .addOrderBy('lesson.orderIndex', 'ASC')
       .getOne();
 
     // A draft answers 404 like a missing course, so its id stays hidden.
@@ -151,7 +154,10 @@ export class CoursesService {
 
     return {
       ...toCourseResponseDto(course),
-      sections: course.sections.map(toSectionResponseDto),
+      sections: course.sections.map((section) => ({
+        ...toSectionResponseDto(section),
+        lessons: section.lessons.map(toLessonResponseDto),
+      })),
     };
   }
 
