@@ -1,12 +1,13 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { QueryFailedError } from 'typeorm';
+import { EntityManager, QueryFailedError } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
@@ -14,6 +15,7 @@ import { CloudinaryService } from '../common/cloudinary/cloudinary.service.js';
 import { CloudinaryResourceType } from '../common/enums/cloudinary-resource-type.enum.js';
 import { ContentType } from '../common/enums/content-type.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
+import { EnrollmentsService } from '../enrollments/enrollments.service.js';
 import { LessonsService } from '../lessons/lessons.service.js';
 import { ContentsService } from './contents.service.js';
 import { ContentItem } from './entities/content-item.entity.js';
@@ -29,7 +31,10 @@ describe('ContentsService', () => {
     ),
     findOne: vi.fn(),
     find: vi.fn(),
+    exists: vi.fn(),
     softRemove: vi.fn(),
+    createQueryBuilder: vi.fn(),
+    manager: { find: vi.fn() },
   };
 
   const mockLessonsService = {
@@ -40,6 +45,10 @@ describe('ContentsService', () => {
     createUploadSignature: vi.fn(),
     getAssetDetails: vi.fn(),
     deleteFile: vi.fn(),
+  };
+
+  const mockEnrollmentsService = {
+    hasActiveEnrollment: vi.fn(),
   };
 
   const instructorUser: JwtPayload = {
@@ -84,10 +93,19 @@ describe('ContentsService', () => {
           provide: CloudinaryService,
           useValue: mockCloudinaryService,
         },
+        {
+          provide: EnrollmentsService,
+          useValue: mockEnrollmentsService,
+        },
       ],
     }).compile();
 
     service = module.get<ContentsService>(ContentsService);
+
+    // Content is created in a lesson of course c-1 unless a test says otherwise.
+    mockLessonsService.findLessonWithCourse.mockResolvedValue({
+      section: { course: { id: 'c-1' } },
+    });
   });
 
   describe('createUploadSignature', () => {
@@ -134,8 +152,15 @@ describe('ContentsService', () => {
 
       await service.create('l-1', dto);
 
+      expect(mockLessonsService.findLessonWithCourse).toHaveBeenCalledWith(
+        'l-1',
+      );
       expect(mockContentItemsRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ lessonId: 'l-1', title: 'Video Lecture' }),
+        expect.objectContaining({
+          lessonId: 'l-1',
+          courseId: 'c-1',
+          title: 'Video Lecture',
+        }),
       );
       expect(mockContentItemsRepo.save).toHaveBeenCalledWith(content);
     });
@@ -229,6 +254,7 @@ describe('ContentsService', () => {
           contentType: ContentType.VIDEO,
           orderIndex: 1,
           lessonId,
+          courseId: 'c-1',
           bodyText: null,
           videoUrl: videoAsset.secureUrl,
           imageUrl: null,
@@ -435,39 +461,80 @@ describe('ContentsService', () => {
   describe('getContent', () => {
     const publishedLesson = {
       section: {
-        course: { instructorId: instructorUser.sub, isPublished: true },
+        course: {
+          id: 'c-1',
+          instructorId: instructorUser.sub,
+          isPublished: true,
+        },
       },
     };
 
     const draftLesson = {
       section: {
-        course: { instructorId: instructorUser.sub, isPublished: false },
+        course: {
+          id: 'c-1',
+          instructorId: instructorUser.sub,
+          isPublished: false,
+        },
       },
     };
 
     const content = { id: 'ci-1', lessonId: 'l-1', title: 'Content' };
+    const publishedContent = {
+      ...content,
+      course: publishedLesson.section.course,
+    };
+    const draftContent = { ...content, course: draftLesson.section.course };
 
-    it('should return published content to student', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue(content);
-      mockLessonsService.findLessonWithCourse.mockResolvedValue(
-        publishedLesson,
-      );
+    it('should return published content to an enrolled student', async () => {
+      mockContentItemsRepo.findOne.mockResolvedValue(publishedContent);
+      mockEnrollmentsService.hasActiveEnrollment.mockResolvedValue(true);
 
       const result = await service.getContent('ci-1', studentUser);
 
-      // The content is loaded alone and its course comes from LessonsService.
+      expect(mockEnrollmentsService.hasActiveEnrollment).toHaveBeenCalledWith(
+        studentUser.sub,
+        'c-1',
+      );
+
+      // The content and its course come in one query.
       expect(mockContentItemsRepo.findOne).toHaveBeenCalledWith({
         where: { id: 'ci-1' },
+        relations: { course: true },
       });
-      expect(mockLessonsService.findLessonWithCourse).toHaveBeenCalledWith(
-        'l-1',
-      );
+      expect(mockLessonsService.findLessonWithCourse).not.toHaveBeenCalled();
       expect(result).toEqual(content);
     });
 
+    it('should throw ForbiddenException to a student who is not enrolled', async () => {
+      mockContentItemsRepo.findOne.mockResolvedValue(publishedContent);
+      mockEnrollmentsService.hasActiveEnrollment.mockResolvedValue(false);
+
+      await expect(service.getContent('ci-1', studentUser)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('should throw ForbiddenException to another instructor who is not enrolled', async () => {
+      mockContentItemsRepo.findOne.mockResolvedValue(publishedContent);
+      mockEnrollmentsService.hasActiveEnrollment.mockResolvedValue(false);
+
+      await expect(
+        service.getContent('ci-1', otherInstructorUser),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should not check an enrollment for the owner or an admin', async () => {
+      mockContentItemsRepo.findOne.mockResolvedValue(publishedContent);
+
+      await service.getContent('ci-1', instructorUser);
+      await service.getContent('ci-1', adminUser);
+
+      expect(mockEnrollmentsService.hasActiveEnrollment).not.toHaveBeenCalled();
+    });
+
     it('should throw NotFoundException to student for draft content', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue(content);
-      mockLessonsService.findLessonWithCourse.mockResolvedValue(draftLesson);
+      mockContentItemsRepo.findOne.mockResolvedValue(draftContent);
 
       await expect(service.getContent('ci-1', studentUser)).rejects.toThrow(
         NotFoundException,
@@ -475,8 +542,7 @@ describe('ContentsService', () => {
     });
 
     it('should throw NotFoundException to another instructor for draft content', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue(content);
-      mockLessonsService.findLessonWithCourse.mockResolvedValue(draftLesson);
+      mockContentItemsRepo.findOne.mockResolvedValue(draftContent);
 
       await expect(
         service.getContent('ci-1', otherInstructorUser),
@@ -484,8 +550,7 @@ describe('ContentsService', () => {
     });
 
     it('should return draft content to the owner and to admins', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue(content);
-      mockLessonsService.findLessonWithCourse.mockResolvedValue(draftLesson);
+      mockContentItemsRepo.findOne.mockResolvedValue(draftContent);
 
       await expect(service.getContent('ci-1', instructorUser)).resolves.toEqual(
         content,
@@ -509,7 +574,11 @@ describe('ContentsService', () => {
     const lesson = {
       id: 'l-1',
       section: {
-        course: { instructorId: instructorUser.sub, isPublished: false },
+        course: {
+          id: 'c-1',
+          instructorId: instructorUser.sub,
+          isPublished: false,
+        },
       },
     };
 
@@ -525,6 +594,32 @@ describe('ContentsService', () => {
         where: { lessonId: 'l-1' },
         order: { orderIndex: 'ASC' },
       });
+    });
+
+    it('should list the content of a published lesson for an enrolled student', async () => {
+      mockLessonsService.findLessonWithCourse.mockResolvedValue({
+        ...lesson,
+        section: { course: { ...lesson.section.course, isPublished: true } },
+      });
+      mockEnrollmentsService.hasActiveEnrollment.mockResolvedValue(true);
+      mockContentItemsRepo.find.mockResolvedValue([{ id: 'ci-1' }]);
+
+      await expect(service.findByLesson('l-1', studentUser)).resolves.toEqual([
+        { id: 'ci-1' },
+      ]);
+    });
+
+    it('should throw ForbiddenException to a student who is not enrolled in the lesson course', async () => {
+      mockLessonsService.findLessonWithCourse.mockResolvedValue({
+        ...lesson,
+        section: { course: { ...lesson.section.course, isPublished: true } },
+      });
+      mockEnrollmentsService.hasActiveEnrollment.mockResolvedValue(false);
+
+      await expect(service.findByLesson('l-1', studentUser)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(mockContentItemsRepo.find).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException to student for a draft lesson', async () => {
@@ -610,6 +705,104 @@ describe('ContentsService', () => {
         NotFoundException,
       );
       expect(mockContentItemsRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findCourseContentLessons', () => {
+    const items = [{ id: 'ci-1', lessonId: 'l-1' }];
+
+    it('should read the live content of the course in one query', async () => {
+      const manager = { find: vi.fn().mockResolvedValue(items) };
+
+      await expect(
+        service.findCourseContentLessons(
+          'c-1',
+          manager as unknown as EntityManager,
+        ),
+      ).resolves.toBe(items);
+      expect(manager.find).toHaveBeenCalledWith(ContentItem, {
+        select: { id: true, lessonId: true },
+        where: { courseId: 'c-1' },
+      });
+    });
+
+    it('should use the repository manager outside a transaction', async () => {
+      mockContentItemsRepo.manager.find.mockResolvedValue(items);
+
+      await expect(service.findCourseContentLessons('c-1')).resolves.toBe(
+        items,
+      );
+    });
+  });
+
+  describe('countCourseContents', () => {
+    it('should count the live content of each course in one query', async () => {
+      const queryBuilder = {
+        select: vi.fn().mockReturnThis(),
+        addSelect: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        groupBy: vi.fn().mockReturnThis(),
+        getRawMany: vi.fn().mockResolvedValue([
+          { courseId: 'c-1', total: '3' },
+          { courseId: 'c-2', total: '1' },
+        ]),
+      };
+      mockContentItemsRepo.createQueryBuilder.mockReturnValue(queryBuilder);
+
+      const totals = await service.countCourseContents(['c-1', 'c-2', 'c-3']);
+
+      expect(totals.get('c-1')).toBe(3);
+      expect(totals.get('c-2')).toBe(1);
+      expect(totals.has('c-3')).toBe(false);
+      expect(queryBuilder.where).toHaveBeenCalledWith(
+        'content.courseId IN (:...courseIds)',
+        { courseIds: ['c-1', 'c-2', 'c-3'] },
+      );
+      expect(queryBuilder.groupBy).toHaveBeenCalledWith('content.courseId');
+    });
+
+    it('should not query without courses', async () => {
+      await expect(service.countCourseContents([])).resolves.toEqual(new Map());
+      expect(mockContentItemsRepo.createQueryBuilder).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('contentExists', () => {
+    it('should check the content by its id', async () => {
+      mockContentItemsRepo.exists.mockResolvedValue(true);
+
+      await expect(service.contentExists('ci-1')).resolves.toBe(true);
+      expect(mockContentItemsRepo.exists).toHaveBeenCalledWith({
+        where: { id: 'ci-1' },
+      });
+    });
+  });
+
+  describe('findProgressContentReference', () => {
+    it('should return the content type, video length and course', async () => {
+      mockContentItemsRepo.findOne.mockResolvedValue({
+        id: 'ci-1',
+        lessonId: 'l-1',
+        courseId: 'c-1',
+        contentType: ContentType.VIDEO,
+        durationSeconds: 120,
+      });
+
+      await expect(
+        service.findProgressContentReference('ci-1'),
+      ).resolves.toEqual({
+        contentType: ContentType.VIDEO,
+        durationSeconds: 120,
+        courseId: 'c-1',
+      });
+    });
+
+    it('should throw NotFoundException when the content does not exist', async () => {
+      mockContentItemsRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.findProgressContentReference('ci-1'),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

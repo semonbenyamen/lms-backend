@@ -134,14 +134,16 @@ export class CoursesService {
     };
   }
 
-  // A published course with its sections, so a visitor sees the outline
-  // before enrolling. Lessons and content stay behind their own endpoints.
+  // A published course with its sections and lesson titles, so a visitor sees
+  // the outline before enrolling. Content stays behind the enrollment.
   async getPublishedCourse(id: string): Promise<CourseResponseDto> {
     const course = await this.courseWithCategoryQuery()
       .leftJoinAndSelect('course.sections', 'section')
+      .leftJoinAndSelect('section.lessons', 'lesson')
       .where('course.id = :id', { id })
       .andWhere('course.isPublished = :isPublished', { isPublished: true })
       .orderBy('section.orderIndex', 'ASC')
+      .addOrderBy('lesson.orderIndex', 'ASC')
       .getOne();
 
     // A draft answers 404 like a missing course, so its id stays hidden.
@@ -293,12 +295,11 @@ export class CoursesService {
     id: string,
     manager: EntityManager,
   ): Promise<void> {
-    // Joins skip soft-deleted lessons and sections, so only live content counts.
+    // Deleting a section or lesson also deletes its content, so live content
+    // always sits in a live lesson and section.
     const hasContent = await manager
       .createQueryBuilder(ContentItem, 'content')
-      .innerJoin('content.lesson', 'lesson')
-      .innerJoin('lesson.section', 'section')
-      .where('section.courseId = :id', { id })
+      .where('content.courseId = :id', { id })
       .getExists();
 
     if (!hasContent) {

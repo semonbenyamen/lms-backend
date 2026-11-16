@@ -1,13 +1,14 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { canReadCourse } from '../common/authorization/authorization.util.js';
@@ -17,6 +18,9 @@ import { UploadSignatureResponseDto } from '../common/cloudinary/dto/upload-sign
 import { isUniqueViolation } from '../common/database/is-unique-violation.js';
 import { CloudinaryResourceType } from '../common/enums/cloudinary-resource-type.enum.js';
 import { ContentType } from '../common/enums/content-type.enum.js';
+import { UserRole } from '../common/enums/user-role.enum.js';
+import { Course } from '../courses/entities/course.entity.js';
+import { EnrollmentsService } from '../enrollments/enrollments.service.js';
 import { LessonsService } from '../lessons/lessons.service.js';
 import {
   getTypeFieldError,
@@ -58,6 +62,12 @@ type MediaInput = Pick<
   'mediaPublicId' | 'videoUrl' | 'imageUrl'
 >;
 
+// What the progress needs to check a content and its course.
+export type ProgressContentReference = Pick<
+  ContentItem,
+  'contentType' | 'durationSeconds'
+> & { courseId: string };
+
 @Injectable()
 export class ContentsService {
   private readonly logger = new Logger(ContentsService.name);
@@ -67,6 +77,7 @@ export class ContentsService {
     private readonly contentItemsRepository: Repository<ContentItem>,
     private readonly lessonsService: LessonsService,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly enrollmentsService: EnrollmentsService,
   ) {}
 
   // Ownership of the lesson is verified by ContentOwnershipGuard before this runs.
@@ -85,10 +96,13 @@ export class ContentsService {
   async create(lessonId: string, dto: CreateContentItemDto): Promise<void> {
     this.assertMediaInput(dto.contentType, dto);
 
+    const lesson = await this.lessonsService.findLessonWithCourse(lessonId);
+
     const { mediaPublicId, ...fields } = dto;
     const contentItem = this.contentItemsRepository.create({
       ...fields,
       lessonId,
+      courseId: lesson.section.course.id,
       mediaPublicId: null,
     });
 
@@ -104,15 +118,20 @@ export class ContentsService {
     id: string,
     user: Pick<JwtPayload, 'sub' | 'role'>,
   ): Promise<ContentItemResponseDto> {
-    const contentItem = await this.findContentItemEntity(id);
-    const lesson = await this.lessonsService.findLessonWithCourse(
-      contentItem.lessonId,
-    );
+    const notFoundMessage = `Content item with ID ${id} not found`;
 
-    // A draft course's content looks missing to users who cannot read it.
-    if (!canReadCourse(lesson.section.course, user)) {
-      throw new NotFoundException(`Content item with ID ${id} not found`);
+    // The course is needed for the access check, so it comes in the same
+    // query, and the content is returned only after the check.
+    const contentItem = await this.contentItemsRepository.findOne({
+      where: { id },
+      relations: { course: true },
+    });
+
+    if (!contentItem) {
+      throw new NotFoundException(notFoundMessage);
     }
+
+    await this.assertCanReadContent(contentItem.course, user, notFoundMessage);
 
     return toContentItemResponseDto(contentItem);
   }
@@ -123,9 +142,11 @@ export class ContentsService {
   ): Promise<ContentItemResponseDto[]> {
     const lesson = await this.lessonsService.findLessonWithCourse(lessonId);
 
-    if (!canReadCourse(lesson.section.course, user)) {
-      throw new NotFoundException(`Lesson with ID ${lessonId} not found`);
-    }
+    await this.assertCanReadContent(
+      lesson.section.course,
+      user,
+      `Lesson with ID ${lessonId} not found`,
+    );
 
     // A lesson has few items, so they are returned in one ordered list.
     const contentItems = await this.contentItemsRepository.find({
@@ -174,7 +195,78 @@ export class ContentsService {
     await this.contentItemsRepository.softRemove(contentItem);
   }
 
+  // The progress needs the type, the video length and the course of a content.
+  // Deleted content is skipped, so it does not exist for progress either.
+  async contentExists(id: string): Promise<boolean> {
+    return this.contentItemsRepository.exists({ where: { id } });
+  }
+
+  // The live content of a course with its lesson, for the course progress.
+  // Deleting a section or lesson also deletes its content, so no join is needed.
+  async findCourseContentLessons(
+    courseId: string,
+    manager?: EntityManager,
+  ): Promise<Pick<ContentItem, 'id' | 'lessonId'>[]> {
+    return (manager ?? this.contentItemsRepository.manager).find(ContentItem, {
+      select: { id: true, lessonId: true },
+      where: { courseId },
+    });
+  }
+
+  // The number of live content items in each course, so the progress of
+  // many courses comes from one query.
+  async countCourseContents(courseIds: string[]): Promise<Map<string, number>> {
+    if (!courseIds.length) {
+      return new Map();
+    }
+
+    const rows = await this.contentItemsRepository
+      .createQueryBuilder('content')
+      .select('content.courseId', 'courseId')
+      .addSelect('COUNT(*)', 'total')
+      .where('content.courseId IN (:...courseIds)', { courseIds })
+      .groupBy('content.courseId')
+      .getRawMany<{ courseId: string; total: string }>();
+
+    return new Map(rows.map((row) => [row.courseId, Number(row.total)]));
+  }
+
+  async findProgressContentReference(
+    id: string,
+  ): Promise<ProgressContentReference> {
+    const contentItem = await this.findContentItemEntity(id);
+
+    return {
+      contentType: contentItem.contentType,
+      durationSeconds: contentItem.durationSeconds,
+      courseId: contentItem.courseId,
+    };
+  }
+
   // --- Helper Methods ---
+
+  // A draft course's content looks missing to users who cannot read it.
+  // Everyone sees the lesson names, but the content itself is only for the
+  // course owner, admins and the students enrolled in the course.
+  private async assertCanReadContent(
+    course: Course,
+    user: Pick<JwtPayload, 'sub' | 'role'>,
+    notFoundMessage: string,
+  ): Promise<void> {
+    if (!canReadCourse(course, user)) {
+      throw new NotFoundException(notFoundMessage);
+    }
+
+    const isOwnerOrAdmin =
+      user.role === UserRole.ADMIN || course.instructorId === user.sub;
+
+    if (
+      !isOwnerOrAdmin &&
+      !(await this.enrollmentsService.hasActiveEnrollment(user.sub, course.id))
+    ) {
+      throw new ForbiddenException('Student enrollment required');
+    }
+  }
 
   // A unique index clash is a 409, not a 500.
   private async saveContentItem(contentItem: ContentItem): Promise<void> {
