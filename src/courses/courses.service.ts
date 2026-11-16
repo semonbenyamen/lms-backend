@@ -31,7 +31,6 @@ import { UpdateCoursePublicationDto } from './dto/update-course-publication.dto.
 import { UpdateCourseDto } from './dto/update-course.dto.js';
 import { EnrollmentsService } from '../enrollments/enrollments.service.js';
 import { softDeleteSectionLessons } from '../lessons/soft-delete-section-lessons.js';
-import { toLessonResponseDto } from '../lessons/transformers/lesson-response.transformer.js';
 import { Section } from '../sections/entities/section.entity.js';
 import { toSectionResponseDto } from '../sections/transformers/section-response.transformer.js';
 import { Course } from './entities/course.entity.js';
@@ -154,10 +153,7 @@ export class CoursesService {
 
     return {
       ...toCourseResponseDto(course),
-      sections: course.sections.map((section) => ({
-        ...toSectionResponseDto(section),
-        lessons: section.lessons.map(toLessonResponseDto),
-      })),
+      sections: course.sections.map(toSectionResponseDto),
     };
   }
 
