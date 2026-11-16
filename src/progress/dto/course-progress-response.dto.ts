@@ -29,6 +29,14 @@ export class CourseProgressResponseDto {
   completedContents: number;
 
   @ApiProperty({
+    type: [String],
+    example: ['7c9e6679-7425-40de-944b-e07fc1f90ae7'],
+    description:
+      'Content items the student completed, to mark them inside each lesson',
+  })
+  completedContentIds: string[];
+
+  @ApiProperty({
     example: 35,
     description: 'Completed content as a percentage, with two decimals',
   })

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, IsNull, Repository } from 'typeorm';
 
@@ -114,6 +114,17 @@ export class EnrollmentsService {
     });
 
     if (existingEnrollment) {
+      // A student who cancelled and enrolls again gets the same enrollment
+      // back, with the progress made before.
+      if (existingEnrollment.cancelledAt) {
+        existingEnrollment.cancelledAt = null;
+
+        return {
+          enrollment: await enrollmentRepo.save(existingEnrollment),
+          created: true,
+        };
+      }
+
       return {
         enrollment: existingEnrollment,
         created: false,
@@ -135,6 +146,35 @@ export class EnrollmentsService {
       enrollment: savedEnrollment,
       created: true,
     };
+  }
+
+  // Cancel the active enrollment of a student in a course. The progress
+  // stays, so it comes back if the student enrolls again.
+  async cancelEnrollment(studentId: string, courseId: string): Promise<void> {
+    const { affected } = await this.enrollmentsRepository.update(
+      { studentId, courseId, cancelledAt: IsNull() },
+      { cancelledAt: new Date() },
+    );
+
+    if (!affected) {
+      throw new NotFoundException('Enrollment not found');
+    }
+  }
+
+  // A page of the active enrollments of a student with their courses,
+  // newest first.
+  async findStudentEnrollments(
+    studentId: string,
+    skip: number,
+    take: number,
+  ): Promise<[Enrollment[], number]> {
+    return this.enrollmentsRepository.findAndCount({
+      where: { studentId, cancelledAt: IsNull() },
+      relations: { course: true },
+      order: { enrolledAt: 'DESC', id: 'ASC' },
+      skip,
+      take,
+    });
   }
 
   // Find an enrollment after a duplicate database error.

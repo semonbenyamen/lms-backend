@@ -11,6 +11,7 @@ export function toCourseProgressResponseDto(
     lessonsCompleted: summary.lessonsCompleted,
     totalContents: summary.totalContents,
     completedContents: summary.completedContents,
+    completedContentIds: summary.completedContentIds,
     completionPercentage: summary.completionPercentage,
     isCompleted: summary.isCompleted,
   };
