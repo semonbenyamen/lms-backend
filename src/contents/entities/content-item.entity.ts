@@ -12,6 +12,7 @@ import {
 import type { Relation } from 'typeorm';
 
 import { ContentType } from '../../common/enums/content-type.enum.js';
+import { Course } from '../../courses/entities/course.entity.js';
 import { Lesson } from '../../lessons/entities/lesson.entity.js';
 
 @Entity('content_items')
@@ -33,6 +34,21 @@ export class ContentItem {
   })
   @JoinColumn({ name: 'lesson_id' })
   lesson: Relation<Lesson>;
+
+  // The course of the lesson, kept on the item so access checks reach the
+  // course in one join. It is set on create and never changes, because a
+  // lesson cannot move to another section and a section cannot move to
+  // another course.
+  @Index('IDX_content_items_course_id')
+  @Column({ name: 'course_id', type: 'uuid' })
+  courseId: string;
+
+  @ManyToOne(() => Course, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'course_id',
+    foreignKeyConstraintName: 'FK_content_items_course_id',
+  })
+  course: Relation<Course>;
 
   @Column({ length: 255 })
   title: string;

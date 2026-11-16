@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthModule } from '../auth/auth.module.js';
 import { CloudinaryModule } from '../common/cloudinary/cloudinary.module.js';
+import { EnrollmentsModule } from '../enrollments/enrollments.module.js';
 import { LessonsModule } from '../lessons/lessons.module.js';
 import { ContentsController } from './contents.controller.js';
 import { ContentsService } from './contents.service.js';
@@ -16,6 +17,7 @@ import { LessonContentsController } from './lesson-contents.controller.js';
     AuthModule,
     LessonsModule,
     CloudinaryModule,
+    EnrollmentsModule,
   ],
   controllers: [LessonContentsController, ContentsController],
   providers: [ContentsService, ContentOwnershipGuard],

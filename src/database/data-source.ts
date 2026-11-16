@@ -8,6 +8,9 @@ import { Section } from '../sections/entities/section.entity.js';
 import { Category } from '../categories/entities/category.entity.js';
 import { Lesson } from '../lessons/entities/lesson.entity.js';
 import { ContentItem } from '../contents/entities/content-item.entity.js';
+import { Enrollment } from '../enrollments/entities/enrollment.entity.js';
+import { ContentProgress } from '../progress/entities/content-progress.entity.js';
+import { ContentProgressHistory } from '../progress/entities/content-progress-history.entity.js';
 
 export const AppDataSource = new DataSource({
   type: 'postgres',
@@ -18,9 +21,13 @@ export const AppDataSource = new DataSource({
     AuthToken,
     RefreshToken,
     Course,
-    Category, Section,
+    Category,
+    Section,
     Lesson,
     ContentItem,
+    Enrollment,
+    ContentProgress,
+    ContentProgressHistory,
   ],
 
   migrations: ['src/database/migrations/*.ts'],

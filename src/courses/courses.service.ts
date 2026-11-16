@@ -1,12 +1,14 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
-import { IsNull, Repository } from 'typeorm';
+import { EntityManager, IsNull, Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { CategoriesService } from '../categories/categories.service.js';
@@ -14,6 +16,7 @@ import { assertValidAsset } from '../common/cloudinary/assert-valid-asset.js';
 import { CloudinaryService } from '../common/cloudinary/cloudinary.service.js';
 import { UploadSignatureResponseDto } from '../common/cloudinary/dto/upload-signature-response.dto.js';
 import { CloudinaryResourceType } from '../common/enums/cloudinary-resource-type.enum.js';
+import { ContentItem } from '../contents/entities/content-item.entity.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
 import { IdResponseDto } from '../common/dto/id-response.dto.js';
 import { PaginationQueryDto } from '../common/pagintion/dto/pagination-query.dto.js';
@@ -24,9 +27,12 @@ import {
 } from '../common/pagintion/pagination.util.js';
 import { CourseResponseDto } from './dto/course-response.dto.js';
 import { CreateCourseDto } from './dto/create-course.dto.js';
+import { UpdateCoursePublicationDto } from './dto/update-course-publication.dto.js';
 import { UpdateCourseDto } from './dto/update-course.dto.js';
+import { EnrollmentsService } from '../enrollments/enrollments.service.js';
 import { softDeleteSectionLessons } from '../lessons/soft-delete-section-lessons.js';
 import { Section } from '../sections/entities/section.entity.js';
+import { toSectionResponseDto } from '../sections/transformers/section-response.transformer.js';
 import { Course } from './entities/course.entity.js';
 import { toCourseResponseDto } from './transformers/course-response.transformer.js';
 
@@ -43,6 +49,7 @@ export class CoursesService {
     private readonly coursesRepository: Repository<Course>,
     private readonly categoriesService: CategoriesService,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly enrollmentsService: EnrollmentsService,
   ) {}
 
   async create(
@@ -108,6 +115,90 @@ export class CoursesService {
     return course;
   }
 
+  // The public catalog: anyone can list the published courses.
+  async findPublished(
+    paginationQuery: PaginationQueryDto,
+  ): Promise<PaginatedResult<CourseResponseDto>> {
+    const { page, limit, skip, take } = getPaginationParams(paginationQuery);
+
+    const [items, total] = await this.courseWithCategoryQuery()
+      .where('course.isPublished = :isPublished', { isPublished: true })
+      .orderBy('course.createdAt', 'DESC')
+      .skip(skip)
+      .take(take)
+      .getManyAndCount();
+
+    return {
+      items: items.map(toCourseResponseDto),
+      meta: getPaginationMeta(total, page, limit),
+    };
+  }
+
+  // A published course with its sections and lesson titles, so a visitor sees
+  // the outline before enrolling. Content stays behind the enrollment.
+  async getPublishedCourse(id: string): Promise<CourseResponseDto> {
+    const course = await this.courseWithCategoryQuery()
+      .leftJoinAndSelect('course.sections', 'section')
+      .leftJoinAndSelect('section.lessons', 'lesson')
+      .where('course.id = :id', { id })
+      .andWhere('course.isPublished = :isPublished', { isPublished: true })
+      .orderBy('section.orderIndex', 'ASC')
+      .addOrderBy('lesson.orderIndex', 'ASC')
+      .getOne();
+
+    // A draft answers 404 like a missing course, so its id stays hidden.
+    if (!course) {
+      throw new NotFoundException(`Course with ID ${id} not found`);
+    }
+
+    return {
+      ...toCourseResponseDto(course),
+      sections: course.sections.map(toSectionResponseDto),
+    };
+  }
+
+  // Ownership is verified by CourseOwnershipGuard before this runs.
+  async setPublication(
+    id: string,
+    updatePublicationDto: UpdateCoursePublicationDto,
+  ): Promise<void> {
+    const { isPublished, confirmUnpublishWithEnrollments } =
+      updatePublicationDto;
+
+    await this.coursesRepository.manager.transaction(async (manager) => {
+      // Locked, so no student can enroll while the publication changes.
+      const course = await manager.findOne(Course, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!course) {
+        throw new NotFoundException(`Course with ID ${id} not found`);
+      }
+
+      if (course.isPublished === isPublished) {
+        return;
+      }
+
+      if (isPublished) {
+        await this.assertHasContent(id, manager);
+      } else if (
+        !confirmUnpublishWithEnrollments &&
+        (await this.enrollmentsService.hasActiveEnrollments(id, manager))
+      ) {
+        // Enrolled students lose access to the content, so the instructor
+        // must confirm it first.
+        throw new ConflictException(
+          'The course has enrolled students who will lose access to its content, send confirmUnpublishWithEnrollments to unpublish it anyway',
+        );
+      }
+
+      course.isPublished = isPublished;
+
+      await manager.save(course);
+    });
+  }
+
   // Ownership is verified by CourseOwnershipGuard before this runs.
   // The course id in the public id ties the uploaded image to this course.
   createThumbnailSignature(id: string): UploadSignatureResponseDto {
@@ -144,13 +235,45 @@ export class CoursesService {
     }
   }
 
+  // A shared lock: a running delete makes the enrollment wait, while
+  // students enrolling in the same course do not wait for each other.
+  async findPublishedCourseForEnrollment(
+    id: string,
+    manager: EntityManager,
+  ): Promise<Course> {
+    const course = await manager.findOne(Course, {
+      where: { id, isPublished: true },
+      lock: { mode: 'pessimistic_read' },
+    });
+
+    if (!course) {
+      throw new NotFoundException('Course not found or unpublished');
+    }
+
+    return course;
+  }
+
   // Ownership is verified by CourseOwnershipGuard before this runs.
   async remove(id: string): Promise<void> {
-    const course = await this.findCourseEntity(id);
-
     // Soft delete the course with its sections, lessons and content together,
     // so a child is never left without a parent and its checks only need itself.
     await this.coursesRepository.manager.transaction(async (manager) => {
+      // Locked, so no student can enroll while the course is being deleted.
+      const course = await manager.findOne(Course, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!course) {
+        throw new NotFoundException(`Course with ID ${id} not found`);
+      }
+
+      if (await this.enrollmentsService.hasActiveEnrollments(id, manager)) {
+        throw new ConflictException(
+          'Cannot delete a course with active enrollments',
+        );
+      }
+
       const sections = await manager.find(Section, {
         where: { courseId: id },
         select: { id: true },
@@ -166,6 +289,25 @@ export class CoursesService {
   }
 
   // --- Helper Methods ---
+
+  // A course is published only with at least one section, lesson and content.
+  private async assertHasContent(
+    id: string,
+    manager: EntityManager,
+  ): Promise<void> {
+    // Deleting a section or lesson also deletes its content, so live content
+    // always sits in a live lesson and section.
+    const hasContent = await manager
+      .createQueryBuilder(ContentItem, 'content')
+      .where('content.courseId = :id', { id })
+      .getExists();
+
+    if (!hasContent) {
+      throw new UnprocessableEntityException(
+        'Cannot publish a course without at least one section, lesson and content',
+      );
+    }
+  }
 
   // null removes the thumbnail; a public id is checked before it is used.
   private async applyThumbnail(
