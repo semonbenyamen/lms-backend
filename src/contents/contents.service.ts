@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
 import { canReadCourse } from '../common/authorization/authorization.util.js';
@@ -199,6 +199,36 @@ export class ContentsService {
   // Deleted content is skipped, so it does not exist for progress either.
   async contentExists(id: string): Promise<boolean> {
     return this.contentItemsRepository.exists({ where: { id } });
+  }
+
+  // The live content of a course with its lesson, for the course progress.
+  // Deleting a section or lesson also deletes its content, so no join is needed.
+  async findCourseContentLessons(
+    courseId: string,
+    manager?: EntityManager,
+  ): Promise<Pick<ContentItem, 'id' | 'lessonId'>[]> {
+    return (manager ?? this.contentItemsRepository.manager).find(ContentItem, {
+      select: { id: true, lessonId: true },
+      where: { courseId },
+    });
+  }
+
+  // The number of live content items in each course, so the progress of
+  // many courses comes from one query.
+  async countCourseContents(courseIds: string[]): Promise<Map<string, number>> {
+    if (!courseIds.length) {
+      return new Map();
+    }
+
+    const rows = await this.contentItemsRepository
+      .createQueryBuilder('content')
+      .select('content.courseId', 'courseId')
+      .addSelect('COUNT(*)', 'total')
+      .where('content.courseId IN (:...courseIds)', { courseIds })
+      .groupBy('content.courseId')
+      .getRawMany<{ courseId: string; total: string }>();
+
+    return new Map(rows.map((row) => [row.courseId, Number(row.total)]));
   }
 
   async findProgressContentReference(

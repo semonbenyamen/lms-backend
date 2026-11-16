@@ -308,6 +308,7 @@ describe('CoursesService', () => {
         where: vi.fn().mockReturnThis(),
         andWhere: vi.fn().mockReturnThis(),
         orderBy: vi.fn().mockReturnThis(),
+        addOrderBy: vi.fn().mockReturnThis(),
         skip: vi.fn().mockReturnThis(),
         take: vi.fn().mockReturnThis(),
         getManyAndCount: vi.fn().mockResolvedValue([[], 0]),
@@ -336,7 +337,7 @@ describe('CoursesService', () => {
       expect(result.meta.total).toBe(1);
     });
 
-    it('should return a published course with its ordered sections', async () => {
+    it('should return a published course with its ordered sections and lessons', async () => {
       catalogQueryBuilder.getOne.mockResolvedValue({
         ...courseEntity('course-1'),
         sections: [
@@ -348,7 +349,17 @@ describe('CoursesService', () => {
             createdAt: timestamp,
             updatedAt: timestamp,
             deletedAt: null,
-            lessons: [],
+            lessons: [
+              {
+                id: 'lesson-1',
+                sectionId: 'section-1',
+                title: 'Lesson 1',
+                orderIndex: 1,
+                createdAt: timestamp,
+                updatedAt: timestamp,
+                deletedAt: null,
+              },
+            ],
           },
         ],
       });
@@ -359,8 +370,16 @@ describe('CoursesService', () => {
         'course.isPublished = :isPublished',
         { isPublished: true },
       );
+      expect(catalogQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith(
+        'section.lessons',
+        'lesson',
+      );
       expect(catalogQueryBuilder.orderBy).toHaveBeenCalledWith(
         'section.orderIndex',
+        'ASC',
+      );
+      expect(catalogQueryBuilder.addOrderBy).toHaveBeenCalledWith(
+        'lesson.orderIndex',
         'ASC',
       );
       expect(result).toEqual({
@@ -373,6 +392,16 @@ describe('CoursesService', () => {
             orderIndex: 1,
             createdAt: timestamp,
             updatedAt: timestamp,
+            lessons: [
+              {
+                id: 'lesson-1',
+                sectionId: 'section-1',
+                title: 'Lesson 1',
+                orderIndex: 1,
+                createdAt: timestamp,
+                updatedAt: timestamp,
+              },
+            ],
           },
         ],
       });
@@ -481,26 +510,6 @@ describe('CoursesService', () => {
       await expect(
         service.setPublication('course-1', { isPublished: true }),
       ).rejects.toThrow(NotFoundException);
-    });
-  });
-
-  describe('Published Course Lookup', () => {
-    it('should return a published course', async () => {
-      const course = courseEntity('course-1');
-      mockCoursesRepo.findOne.mockResolvedValue(course);
-
-      await expect(service.findPublishedById('course-1')).resolves.toBe(course);
-      expect(mockCoursesRepo.findOne).toHaveBeenCalledWith({
-        where: { id: 'course-1', isPublished: true },
-      });
-    });
-
-    it('should answer 404 for a draft or missing course', async () => {
-      mockCoursesRepo.findOne.mockResolvedValue(null);
-
-      await expect(service.findPublishedById('course-1')).rejects.toThrow(
-        NotFoundException,
-      );
     });
   });
 

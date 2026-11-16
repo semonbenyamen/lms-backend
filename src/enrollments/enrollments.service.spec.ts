@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EntityManager, IsNull, Repository } from 'typeorm';
 
@@ -27,11 +28,14 @@ describe('EnrollmentsService', () => {
     save: vi.fn(),
     count: vi.fn(),
     exists: vi.fn(),
+    update: vi.fn(),
+    findAndCount: vi.fn(),
     createQueryBuilder: vi.fn(),
   };
 
   // Reaches the course of a content through its lesson and section.
   const contentQueryBuilder = {
+    innerJoinAndSelect: vi.fn(),
     innerJoin: vi.fn(),
     where: vi.fn(),
     andWhere: vi.fn(),
@@ -53,22 +57,60 @@ describe('EnrollmentsService', () => {
     enrollmentsRepository.createQueryBuilder.mockReturnValue(
       contentQueryBuilder,
     );
+    contentQueryBuilder.innerJoinAndSelect.mockReturnThis();
     contentQueryBuilder.innerJoin.mockReturnThis();
     contentQueryBuilder.where.mockReturnThis();
     contentQueryBuilder.andWhere.mockReturnThis();
   });
 
   it('should lock the enrollment inside the given transaction', async () => {
-    const manager = { findOne: vi.fn() };
+    const manager = { findOne: vi.fn().mockResolvedValue(existingEnrollment) };
 
-    await service.lockEnrollment(
-      'enrollment-1',
-      manager as unknown as EntityManager,
-    );
+    await expect(
+      service.lockEnrollment(
+        'enrollment-1',
+        manager as unknown as EntityManager,
+      ),
+    ).resolves.toBe(existingEnrollment);
 
     expect(manager.findOne).toHaveBeenCalledWith(Enrollment, {
       where: { id: 'enrollment-1' },
       lock: { mode: 'pessimistic_write' },
+    });
+  });
+
+  it('should save the progress totals inside the given transaction', async () => {
+    const manager = { update: vi.fn() };
+    const summary = {
+      completionPercentage: 50,
+      lessonsCompleted: 1,
+      status: EnrollmentStatus.IN_PROGRESS,
+      lastActivityAt: new Date('2026-11-01T10:00:00.000Z'),
+      completedAt: null,
+    };
+
+    await service.updateProgressSummary(
+      'enrollment-1',
+      summary,
+      manager as unknown as EntityManager,
+    );
+
+    expect(manager.update).toHaveBeenCalledWith(
+      Enrollment,
+      { id: 'enrollment-1' },
+      summary,
+    );
+  });
+
+  it('should find the active enrollment in a course with the course', async () => {
+    enrollmentsRepository.findOne.mockResolvedValue(existingEnrollment);
+
+    await expect(
+      service.findActiveEnrollment(studentId, courseId),
+    ).resolves.toBe(existingEnrollment);
+    expect(enrollmentsRepository.findOne).toHaveBeenCalledWith({
+      where: { studentId, courseId, cancelledAt: IsNull() },
+      relations: { course: true },
     });
   });
 
@@ -90,6 +132,11 @@ describe('EnrollmentsService', () => {
       service.findActiveEnrollmentByContent(studentId, 'content-1'),
     ).resolves.toBe(existingEnrollment);
 
+    // The course comes in the same query, for the publication check.
+    expect(contentQueryBuilder.innerJoinAndSelect).toHaveBeenCalledWith(
+      'enrollment.course',
+      'course',
+    );
     expect(contentQueryBuilder.innerJoin).toHaveBeenCalledWith(
       ContentItem,
       'content',
@@ -147,6 +194,67 @@ describe('EnrollmentsService', () => {
 
     expect(enrollmentsRepository.create).not.toHaveBeenCalled();
     expect(enrollmentsRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('should reactivate a cancelled enrollment with its progress', async () => {
+    const cancelled = {
+      ...existingEnrollment,
+      completionPercentage: 40,
+      cancelledAt: new Date('2026-11-01T10:00:00.000Z'),
+    } as Enrollment;
+    enrollmentsRepository.findOne.mockResolvedValue(cancelled);
+    enrollmentsRepository.save.mockImplementation(
+      async (enrollment: Enrollment) => enrollment,
+    );
+
+    const result = await service.createOrFindEnrollment(
+      studentId,
+      courseId,
+      manager as unknown as EntityManager,
+    );
+
+    expect(result.created).toBe(true);
+    expect(result.enrollment.cancelledAt).toBeNull();
+    expect(result.enrollment.completionPercentage).toBe(40);
+    expect(enrollmentsRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('should cancel the active enrollment of a student', async () => {
+    enrollmentsRepository.update.mockResolvedValue({ affected: 1 });
+
+    await expect(
+      service.cancelEnrollment(studentId, courseId),
+    ).resolves.toBeUndefined();
+    expect(enrollmentsRepository.update).toHaveBeenCalledWith(
+      { studentId, courseId, cancelledAt: IsNull() },
+      { cancelledAt: expect.any(Date) },
+    );
+  });
+
+  it('should return 404 when there is no active enrollment to cancel', async () => {
+    enrollmentsRepository.update.mockResolvedValue({ affected: 0 });
+
+    await expect(service.cancelEnrollment(studentId, courseId)).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it('should find a page of the active enrollments of a student', async () => {
+    enrollmentsRepository.findAndCount.mockResolvedValue([
+      [existingEnrollment],
+      1,
+    ]);
+
+    await expect(
+      service.findStudentEnrollments(studentId, 10, 10),
+    ).resolves.toEqual([[existingEnrollment], 1]);
+    expect(enrollmentsRepository.findAndCount).toHaveBeenCalledWith({
+      where: { studentId, cancelledAt: IsNull() },
+      relations: { course: true },
+      order: { enrolledAt: 'DESC', id: 'ASC' },
+      skip: 10,
+      take: 10,
+    });
   });
 
   it('should detect active enrollments', async () => {

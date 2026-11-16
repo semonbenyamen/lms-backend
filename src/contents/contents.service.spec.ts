@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { QueryFailedError } from 'typeorm';
+import { EntityManager, QueryFailedError } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { JwtPayload } from '../auth/types/authenticated-request.type.js';
@@ -33,6 +33,8 @@ describe('ContentsService', () => {
     find: vi.fn(),
     exists: vi.fn(),
     softRemove: vi.fn(),
+    createQueryBuilder: vi.fn(),
+    manager: { find: vi.fn() },
   };
 
   const mockLessonsService = {
@@ -703,6 +705,65 @@ describe('ContentsService', () => {
         NotFoundException,
       );
       expect(mockContentItemsRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findCourseContentLessons', () => {
+    const items = [{ id: 'ci-1', lessonId: 'l-1' }];
+
+    it('should read the live content of the course in one query', async () => {
+      const manager = { find: vi.fn().mockResolvedValue(items) };
+
+      await expect(
+        service.findCourseContentLessons(
+          'c-1',
+          manager as unknown as EntityManager,
+        ),
+      ).resolves.toBe(items);
+      expect(manager.find).toHaveBeenCalledWith(ContentItem, {
+        select: { id: true, lessonId: true },
+        where: { courseId: 'c-1' },
+      });
+    });
+
+    it('should use the repository manager outside a transaction', async () => {
+      mockContentItemsRepo.manager.find.mockResolvedValue(items);
+
+      await expect(service.findCourseContentLessons('c-1')).resolves.toBe(
+        items,
+      );
+    });
+  });
+
+  describe('countCourseContents', () => {
+    it('should count the live content of each course in one query', async () => {
+      const queryBuilder = {
+        select: vi.fn().mockReturnThis(),
+        addSelect: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        groupBy: vi.fn().mockReturnThis(),
+        getRawMany: vi.fn().mockResolvedValue([
+          { courseId: 'c-1', total: '3' },
+          { courseId: 'c-2', total: '1' },
+        ]),
+      };
+      mockContentItemsRepo.createQueryBuilder.mockReturnValue(queryBuilder);
+
+      const totals = await service.countCourseContents(['c-1', 'c-2', 'c-3']);
+
+      expect(totals.get('c-1')).toBe(3);
+      expect(totals.get('c-2')).toBe(1);
+      expect(totals.has('c-3')).toBe(false);
+      expect(queryBuilder.where).toHaveBeenCalledWith(
+        'content.courseId IN (:...courseIds)',
+        { courseIds: ['c-1', 'c-2', 'c-3'] },
+      );
+      expect(queryBuilder.groupBy).toHaveBeenCalledWith('content.courseId');
+    });
+
+    it('should not query without courses', async () => {
+      await expect(service.countCourseContents([])).resolves.toEqual(new Map());
+      expect(mockContentItemsRepo.createQueryBuilder).not.toHaveBeenCalled();
     });
   });
 

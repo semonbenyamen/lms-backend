@@ -13,13 +13,13 @@ import {
   ProgressContentReference,
 } from '../contents/contents.service.js';
 import { EnrollmentsService } from '../enrollments/enrollments.service.js';
-import { CoursesService } from '../courses/courses.service.js';
 import { Enrollment } from '../enrollments/entities/enrollment.entity.js';
 import { ContentProgressResponseDto } from './dto/content-progress-response.dto.js';
 import { UpdateContentProgressDto } from './dto/update-content-progress.dto.js';
 import { ContentProgressHistory } from './entities/content-progress-history.entity.js';
 import { ContentProgress } from './entities/content-progress.entity.js';
 import { toContentProgressResponseDto } from './transformers/content-progress-response.transformer.js';
+import { CourseProgressService } from './course-progress.service.js';
 
 @Injectable()
 export class ProgressService {
@@ -28,12 +28,13 @@ export class ProgressService {
     private readonly progressRepository: Repository<ContentProgress>,
     private readonly contentsService: ContentsService,
     private readonly enrollmentsService: EnrollmentsService,
-    private readonly coursesService: CoursesService,
     private readonly dataSource: DataSource,
+    private readonly courseProgressService: CourseProgressService,
   ) {}
 
   // Missing or deleted content is a 404, existing content without an
-  // enrollment is a 403. Content metadata is still not loaded here.
+  // enrollment is a 403, and a draft course looks missing. The course comes
+  // with the enrollment, so content metadata is still not loaded here.
   private async findEnrollmentOrFail(
     studentId: string,
     contentId: string,
@@ -45,6 +46,12 @@ export class ProgressService {
       );
 
     if (enrollment) {
+      if (!enrollment.course.isPublished) {
+        throw new NotFoundException(
+          `Course with ID ${enrollment.courseId} not found`,
+        );
+      }
+
       return enrollment;
     }
 
@@ -72,9 +79,6 @@ export class ProgressService {
     const content =
       await this.contentsService.findProgressContentReference(contentId);
 
-    // Verify that the course is published.
-    await this.coursesService.findPublishedById(content.courseId);
-
     return { content, enrollment };
   }
 
@@ -84,9 +88,6 @@ export class ProgressService {
     contentId: string,
   ): Promise<ContentProgressResponseDto> {
     const enrollment = await this.findEnrollmentOrFail(studentId, contentId);
-
-    // Verify course publication without fetching content metadata.
-    await this.coursesService.findPublishedById(enrollment.courseId);
 
     const progress = await this.progressRepository.findOne({
       where: {
@@ -139,7 +140,14 @@ export class ProgressService {
 
       // Updates of one student run one after another, so two parallel
       // requests cannot both read the old row and save a lower position.
-      await this.enrollmentsService.lockEnrollment(enrollmentId, manager);
+      const enrollment = await this.enrollmentsService.lockEnrollment(
+        enrollmentId,
+        manager,
+      );
+
+      if (!enrollment || enrollment.cancelledAt) {
+        throw new ForbiddenException('Student is not enrolled in this course');
+      }
 
       const current = await progressRepository.findOne({
         where: {
@@ -174,6 +182,9 @@ export class ProgressService {
         isCompleted: completed,
         lastPositionSeconds: dto.lastPositionSeconds ?? null,
       });
+
+      // Refresh the enrollment totals in the same transaction.
+      await this.courseProgressService.refreshEnrollment(enrollment, manager);
 
       return progressRepository.findOneOrFail({
         where: {

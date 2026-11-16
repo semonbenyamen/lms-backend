@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, IsNull, Repository } from 'typeorm';
 
@@ -30,10 +30,42 @@ export class EnrollmentsService {
 
   // Lock the enrollment until the transaction ends, so the updates of one
   // student run one after another.
-  async lockEnrollment(id: string, manager: EntityManager): Promise<void> {
-    await manager.findOne(Enrollment, {
+  // It returns the locked row, so the caller reads its latest values.
+  async lockEnrollment(
+    id: string,
+    manager: EntityManager,
+  ): Promise<Enrollment | null> {
+    return manager.findOne(Enrollment, {
       where: { id },
       lock: { mode: 'pessimistic_write' },
+    });
+  }
+
+  // Save the progress totals of an enrollment inside the given transaction.
+  async updateProgressSummary(
+    id: string,
+    summary: Pick<
+      Enrollment,
+      | 'completionPercentage'
+      | 'lessonsCompleted'
+      | 'status'
+      | 'lastActivityAt'
+      | 'completedAt'
+    >,
+    manager: EntityManager,
+  ): Promise<void> {
+    await manager.update(Enrollment, { id }, summary);
+  }
+
+  // Find the student's active enrollment in a course, with the course,
+  // so the caller can check the course is published without another query.
+  async findActiveEnrollment(
+    studentId: string,
+    courseId: string,
+  ): Promise<Enrollment | null> {
+    return this.enrollmentsRepository.findOne({
+      where: { studentId, courseId, cancelledAt: IsNull() },
+      relations: { course: true },
     });
   }
 
@@ -47,15 +79,16 @@ export class EnrollmentsService {
     });
   }
 
-  // Find the student's active enrollment in the course that owns the content.
-  // The course is reached through the lesson and section, and joins skip
-  // soft-deleted rows, so deleted content has no enrollment.
+  // Find the student's active enrollment in the course that owns the content,
+  // with the course. Joins skip soft-deleted rows, so deleted content has no
+  // enrollment.
   async findActiveEnrollmentByContent(
     studentId: string,
     contentId: string,
   ): Promise<Enrollment | null> {
     return this.enrollmentsRepository
       .createQueryBuilder('enrollment')
+      .innerJoinAndSelect('enrollment.course', 'course')
       .innerJoin(
         ContentItem,
         'content',
@@ -81,6 +114,17 @@ export class EnrollmentsService {
     });
 
     if (existingEnrollment) {
+      // A student who cancelled and enrolls again gets the same enrollment
+      // back, with the progress made before.
+      if (existingEnrollment.cancelledAt) {
+        existingEnrollment.cancelledAt = null;
+
+        return {
+          enrollment: await enrollmentRepo.save(existingEnrollment),
+          created: true,
+        };
+      }
+
       return {
         enrollment: existingEnrollment,
         created: false,
@@ -102,6 +146,35 @@ export class EnrollmentsService {
       enrollment: savedEnrollment,
       created: true,
     };
+  }
+
+  // Cancel the active enrollment of a student in a course. The progress
+  // stays, so it comes back if the student enrolls again.
+  async cancelEnrollment(studentId: string, courseId: string): Promise<void> {
+    const { affected } = await this.enrollmentsRepository.update(
+      { studentId, courseId, cancelledAt: IsNull() },
+      { cancelledAt: new Date() },
+    );
+
+    if (!affected) {
+      throw new NotFoundException('Enrollment not found');
+    }
+  }
+
+  // A page of the active enrollments of a student with their courses,
+  // newest first.
+  async findStudentEnrollments(
+    studentId: string,
+    skip: number,
+    take: number,
+  ): Promise<[Enrollment[], number]> {
+    return this.enrollmentsRepository.findAndCount({
+      where: { studentId, cancelledAt: IsNull() },
+      relations: { course: true },
+      order: { enrolledAt: 'DESC', id: 'ASC' },
+      skip,
+      take,
+    });
   }
 
   // Find an enrollment after a duplicate database error.

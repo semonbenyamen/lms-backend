@@ -9,10 +9,10 @@ import type { DataSource, Repository } from 'typeorm';
 import { ContentType } from '../common/enums/content-type.enum.js';
 import { ContentsService } from '../contents/contents.service.js';
 import { EnrollmentsService } from '../enrollments/enrollments.service.js';
-import { CoursesService } from '../courses/courses.service.js';
 import { ContentProgress } from './entities/content-progress.entity.js';
 import { ContentProgressHistory } from './entities/content-progress-history.entity.js';
 import { ProgressService } from './progress.service.js';
+import { CourseProgressService } from './course-progress.service.js';
 
 describe('ProgressService', () => {
   const studentId = 'student-id';
@@ -31,15 +31,17 @@ describe('ProgressService', () => {
     id: 'enrollment-id',
     courseId,
     cancelledAt: null,
+    course: { id: courseId, isPublished: true },
+  };
+
+  const draftEnrollment = {
+    ...enrollment,
+    course: { id: courseId, isPublished: false },
   };
 
   const contentsService = {
     findProgressContentReference: vi.fn(),
     contentExists: vi.fn(),
-  };
-
-  const coursesService = {
-    findPublishedById: vi.fn(),
   };
 
   const enrollmentsService = {
@@ -65,6 +67,10 @@ describe('ProgressService', () => {
     transaction: vi.fn(),
   };
 
+  const courseProgress = {
+    refreshEnrollment: vi.fn(),
+  };
+
   let service: ProgressService;
 
   beforeEach(() => {
@@ -72,11 +78,6 @@ describe('ProgressService', () => {
 
     contentsService.findProgressContentReference.mockResolvedValue(content);
     contentsService.contentExists.mockResolvedValue(true);
-
-    coursesService.findPublishedById.mockResolvedValue({
-      id: courseId,
-      isPublished: true,
-    });
 
     enrollmentsService.findActiveEnrollmentByContent.mockResolvedValue(
       enrollment,
@@ -90,6 +91,8 @@ describe('ProgressService', () => {
     });
     progress.upsert.mockResolvedValue(undefined);
     history.insert.mockResolvedValue(undefined);
+    enrollmentsService.lockEnrollment.mockResolvedValue(enrollment);
+    courseProgress.refreshEnrollment.mockResolvedValue(undefined);
 
     manager.getRepository.mockImplementation((entity) => {
       if (entity === ContentProgress) return progress;
@@ -105,8 +108,8 @@ describe('ProgressService', () => {
       progress as unknown as Repository<ContentProgress>,
       contentsService as unknown as ContentsService,
       enrollmentsService as unknown as EnrollmentsService,
-      coursesService as unknown as CoursesService,
       dataSource as unknown as DataSource,
+      courseProgress as unknown as CourseProgressService,
     );
   });
 
@@ -121,8 +124,8 @@ describe('ProgressService', () => {
   });
 
   it('hides unpublished content', async () => {
-    coursesService.findPublishedById.mockRejectedValue(
-      new NotFoundException('Content not found or unpublished'),
+    enrollmentsService.findActiveEnrollmentByContent.mockResolvedValue(
+      draftEnrollment,
     );
 
     await expect(service.getProgress(studentId, contentId)).rejects.toThrow(
@@ -181,6 +184,11 @@ describe('ProgressService', () => {
         isCompleted: false,
       }),
     );
+
+    expect(courseProgress.refreshEnrollment).toHaveBeenCalledWith(
+      enrollment,
+      manager,
+    );
   });
 
   it('appends a history record for every progress update', async () => {
@@ -203,6 +211,7 @@ describe('ProgressService', () => {
       2,
       expect.objectContaining({ lastPositionSeconds: 40 }),
     );
+    expect(courseProgress.refreshEnrollment).toHaveBeenCalledTimes(2);
   });
 
   it('rejects video position beyond duration', async () => {
@@ -270,6 +279,7 @@ describe('ProgressService', () => {
 
     expect(progress.upsert).toHaveBeenCalledOnce();
     expect(history.insert).toHaveBeenCalledOnce();
+    expect(courseProgress.refreshEnrollment).not.toHaveBeenCalled();
   });
 
   it('returns 404 for missing or deleted content', async () => {
@@ -303,6 +313,74 @@ describe('ProgressService', () => {
     ).toBeLessThan(progress.findOne.mock.invocationCallOrder[0]);
   });
 
+  it('rejects an update when the locked enrollment is gone', async () => {
+    enrollmentsService.lockEnrollment.mockResolvedValue(null);
+
+    await expect(
+      service.updateStudentContentProgress(studentId, contentId, {
+        isCompleted: true,
+      }),
+    ).rejects.toThrow(ForbiddenException);
+
+    expect(progress.upsert).not.toHaveBeenCalled();
+    expect(courseProgress.refreshEnrollment).not.toHaveBeenCalled();
+  });
+
+  it('rejects progress updates without any progress fields', async () => {
+    await expect(
+      service.updateStudentContentProgress(studentId, contentId, {}),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('does not refresh course completion when saving progress fails', async () => {
+    progress.upsert.mockRejectedValue(new Error('Progress save failed'));
+
+    await expect(
+      service.updateStudentContentProgress(studentId, contentId, {
+        isCompleted: true,
+      }),
+    ).rejects.toThrow('Progress save failed');
+
+    expect(history.insert).not.toHaveBeenCalled();
+    expect(courseProgress.refreshEnrollment).not.toHaveBeenCalled();
+  });
+
+  it('rejects an enrollment cancelled before the transaction lock', async () => {
+    enrollmentsService.lockEnrollment.mockResolvedValue({
+      ...enrollment,
+      cancelledAt: new Date(),
+    });
+
+    await expect(
+      service.updateStudentContentProgress(studentId, contentId, {
+        isCompleted: true,
+      }),
+    ).rejects.toThrow(ForbiddenException);
+
+    expect(progress.upsert).not.toHaveBeenCalled();
+    expect(history.insert).not.toHaveBeenCalled();
+    expect(courseProgress.refreshEnrollment).not.toHaveBeenCalled();
+  });
+
+  it('propagates enrollment refresh failures within the transaction', async () => {
+    courseProgress.refreshEnrollment.mockRejectedValue(
+      new Error('Enrollment refresh failed'),
+    );
+
+    await expect(
+      service.updateStudentContentProgress(studentId, contentId, {
+        isCompleted: true,
+      }),
+    ).rejects.toThrow('Enrollment refresh failed');
+
+    expect(dataSource.transaction).toHaveBeenCalledOnce();
+    expect(progress.upsert).toHaveBeenCalledOnce();
+    expect(history.insert).toHaveBeenCalledOnce();
+    expect(courseProgress.refreshEnrollment).toHaveBeenCalledOnce();
+  });
+
   it('does not read progress when enrollment is missing', async () => {
     enrollmentsService.findActiveEnrollmentByContent.mockResolvedValue(null);
 
@@ -311,13 +389,12 @@ describe('ProgressService', () => {
     );
 
     expect(contentsService.findProgressContentReference).not.toHaveBeenCalled();
-    expect(coursesService.findPublishedById).not.toHaveBeenCalled();
     expect(progress.findOne).not.toHaveBeenCalled();
   });
 
   it('checks enrollment before rejecting unpublished content', async () => {
-    coursesService.findPublishedById.mockRejectedValue(
-      new NotFoundException('Content not found or unpublished'),
+    enrollmentsService.findActiveEnrollmentByContent.mockResolvedValue(
+      draftEnrollment,
     );
 
     await expect(service.getProgress(studentId, contentId)).rejects.toThrow(

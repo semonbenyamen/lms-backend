@@ -1,5 +1,7 @@
 import {
   Controller,
+  Delete,
+  HttpCode,
   HttpStatus,
   Param,
   ParseUUIDPipe,
@@ -16,7 +18,10 @@ import { UserRole } from '../common/enums/user-role.enum.js';
 import { EnrollmentResponseDto } from '../enrollments/dto/enrollment-response.dto.js';
 import { toEnrollmentResponseDto } from '../enrollments/transformers/enrollment-response.transformer.js';
 import { CourseEnrollmentCoordinator } from './course-enrollment.coordinator.js';
-import { ApiEnrollInCourse } from './course-enrollment.swagger.js';
+import {
+  ApiCancelEnrollment,
+  ApiEnrollInCourse,
+} from './course-enrollment.swagger.js';
 
 @ApiTags('Enrollments')
 @Controller('courses')
@@ -40,5 +45,16 @@ export class CourseEnrollmentController {
     response.status(created ? HttpStatus.CREATED : HttpStatus.OK);
 
     return toEnrollmentResponseDto(enrollment);
+  }
+
+  @Delete(':courseId/enroll')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Auth(UserRole.STUDENT)
+  @ApiCancelEnrollment()
+  cancel(
+    @Param('courseId', new ParseUUIDPipe()) courseId: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<void> {
+    return this.coordinator.cancel(request.user.sub, courseId);
   }
 }
