@@ -99,21 +99,22 @@ describe('ContentOwnershipGuard', () => {
 
   describe('Update or delete content', () => {
     it('should allow the course owner', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue({ lessonId });
-      mockLessonsService.findLessonWithCourse.mockResolvedValue({
-        section: { course },
-      });
+      mockContentItemsRepo.findOne.mockResolvedValue({ lessonId, course });
 
       await expect(
         guard.canActivate(createContext(owner, { id: contentItemId })),
       ).resolves.toBe(true);
+
+      // The item and its course come in one query.
+      expect(mockContentItemsRepo.findOne).toHaveBeenCalledWith({
+        where: { id: contentItemId },
+        relations: { course: true },
+      });
+      expect(mockLessonsService.findLessonWithCourse).not.toHaveBeenCalled();
     });
 
     it('should forbid another instructor', async () => {
-      mockContentItemsRepo.findOne.mockResolvedValue({ lessonId });
-      mockLessonsService.findLessonWithCourse.mockResolvedValue({
-        section: { course },
-      });
+      mockContentItemsRepo.findOne.mockResolvedValue({ lessonId, course });
 
       await expect(
         guard.canActivate(

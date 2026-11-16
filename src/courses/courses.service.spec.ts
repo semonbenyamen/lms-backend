@@ -1,4 +1,10 @@
-import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Logger,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { IsNull } from 'typeorm';
@@ -11,8 +17,10 @@ import { CloudinaryResourceType } from '../common/enums/cloudinary-resource-type
 import { CourseDifficulty } from '../common/enums/course-difficulty.enum.js';
 import { CourseLanguage } from '../common/enums/course-language.enum.js';
 import { UserRole } from '../common/enums/user-role.enum.js';
+import { EnrollmentsService } from '../enrollments/enrollments.service.js';
 import { softDeleteSectionLessons } from '../lessons/soft-delete-section-lessons.js';
 import { Section } from '../sections/entities/section.entity.js';
+import { ContentItem } from '../contents/entities/content-item.entity.js';
 import { CoursesService } from './courses.service.js';
 import { Course } from './entities/course.entity.js';
 
@@ -41,9 +49,23 @@ describe('CoursesService', () => {
 
   // The delete runs its queries on the transaction manager.
   const transactionManager = {
+    findOne: vi.fn(),
     find: vi.fn(),
+    save: vi.fn(),
     softDelete: vi.fn(),
     softRemove: vi.fn(),
+    createQueryBuilder: vi.fn(),
+  };
+
+  // Checks that a course has content before it is published.
+  const contentQueryBuilder = {
+    innerJoin: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    getExists: vi.fn(),
+  };
+
+  const mockEnrollmentsService = {
+    hasActiveEnrollments: vi.fn(),
   };
 
   const mockCategoriesService = {
@@ -113,6 +135,7 @@ describe('CoursesService', () => {
         work(transactionManager),
     );
     mockCoursesRepo.createQueryBuilder.mockReturnValue(courseQueryBuilder);
+    transactionManager.createQueryBuilder.mockReturnValue(contentQueryBuilder);
     courseQueryBuilder.getOne.mockImplementation(
       () => mockCoursesRepo.save.mock.results.at(-1)?.value,
     );
@@ -131,6 +154,10 @@ describe('CoursesService', () => {
         {
           provide: CloudinaryService,
           useValue: mockCloudinaryService,
+        },
+        {
+          provide: EnrollmentsService,
+          useValue: mockEnrollmentsService,
         },
       ],
     }).compile();
@@ -267,6 +294,222 @@ describe('CoursesService', () => {
       await service.findAll({ page: 1, limit: 10 }, adminUser);
 
       expect(mockQueryBuilder.andWhere).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Course Catalog', () => {
+    let catalogQueryBuilder: Record<string, ReturnType<typeof vi.fn>>;
+
+    beforeEach(() => {
+      catalogQueryBuilder = {
+        leftJoin: vi.fn().mockReturnThis(),
+        leftJoinAndSelect: vi.fn().mockReturnThis(),
+        addSelect: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        andWhere: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        addOrderBy: vi.fn().mockReturnThis(),
+        skip: vi.fn().mockReturnThis(),
+        take: vi.fn().mockReturnThis(),
+        getManyAndCount: vi.fn().mockResolvedValue([[], 0]),
+        getOne: vi.fn(),
+      };
+      mockCoursesRepo.createQueryBuilder.mockReturnValue(catalogQueryBuilder);
+    });
+
+    it('should list only the published courses, newest first', async () => {
+      catalogQueryBuilder.getManyAndCount.mockResolvedValue([
+        [courseEntity('course-1')],
+        1,
+      ]);
+
+      const result = await service.findPublished({ page: 1, limit: 10 });
+
+      expect(catalogQueryBuilder.where).toHaveBeenCalledWith(
+        'course.isPublished = :isPublished',
+        { isPublished: true },
+      );
+      expect(catalogQueryBuilder.orderBy).toHaveBeenCalledWith(
+        'course.createdAt',
+        'DESC',
+      );
+      expect(result.items).toEqual([courseResponse('course-1')]);
+      expect(result.meta.total).toBe(1);
+    });
+
+    it('should return a published course with its ordered sections and lessons', async () => {
+      catalogQueryBuilder.getOne.mockResolvedValue({
+        ...courseEntity('course-1'),
+        sections: [
+          {
+            id: 'section-1',
+            courseId: 'course-1',
+            title: 'Chapter 1',
+            orderIndex: 1,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            deletedAt: null,
+            lessons: [
+              {
+                id: 'lesson-1',
+                sectionId: 'section-1',
+                title: 'Lesson 1',
+                orderIndex: 1,
+                createdAt: timestamp,
+                updatedAt: timestamp,
+                deletedAt: null,
+              },
+            ],
+          },
+        ],
+      });
+
+      const result = await service.getPublishedCourse('course-1');
+
+      expect(catalogQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'course.isPublished = :isPublished',
+        { isPublished: true },
+      );
+      expect(catalogQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith(
+        'section.lessons',
+        'lesson',
+      );
+      expect(catalogQueryBuilder.orderBy).toHaveBeenCalledWith(
+        'section.orderIndex',
+        'ASC',
+      );
+      expect(catalogQueryBuilder.addOrderBy).toHaveBeenCalledWith(
+        'lesson.orderIndex',
+        'ASC',
+      );
+      expect(result).toEqual({
+        ...courseResponse('course-1'),
+        sections: [
+          {
+            id: 'section-1',
+            courseId: 'course-1',
+            title: 'Chapter 1',
+            orderIndex: 1,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            lessons: [
+              {
+                id: 'lesson-1',
+                sectionId: 'section-1',
+                title: 'Lesson 1',
+                orderIndex: 1,
+                createdAt: timestamp,
+                updatedAt: timestamp,
+              },
+            ],
+          },
+        ],
+      });
+    });
+
+    it('should answer 404 for a draft or missing course', async () => {
+      catalogQueryBuilder.getOne.mockResolvedValue(null);
+
+      await expect(service.getPublishedCourse('course-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('Course Publication', () => {
+    const draft = () => ({ ...courseEntity('course-1'), isPublished: false });
+    const published = () => ({
+      ...courseEntity('course-1'),
+      isPublished: true,
+    });
+
+    it('should lock the course and publish it when it has content', async () => {
+      transactionManager.findOne.mockResolvedValue(draft());
+      contentQueryBuilder.getExists.mockResolvedValue(true);
+
+      await expect(
+        service.setPublication('course-1', { isPublished: true }),
+      ).resolves.toBeUndefined();
+
+      expect(transactionManager.findOne).toHaveBeenCalledWith(Course, {
+        where: { id: 'course-1' },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(transactionManager.createQueryBuilder).toHaveBeenCalledWith(
+        ContentItem,
+        'content',
+      );
+      expect(contentQueryBuilder.where).toHaveBeenCalledWith(
+        'content.courseId = :id',
+        { id: 'course-1' },
+      );
+      expect(transactionManager.save).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'course-1', isPublished: true }),
+      );
+    });
+
+    it('should not publish a course without content', async () => {
+      transactionManager.findOne.mockResolvedValue(draft());
+      contentQueryBuilder.getExists.mockResolvedValue(false);
+
+      await expect(
+        service.setPublication('course-1', { isPublished: true }),
+      ).rejects.toThrow(UnprocessableEntityException);
+      expect(transactionManager.save).not.toHaveBeenCalled();
+    });
+
+    it('should unpublish a course without enrolled students', async () => {
+      transactionManager.findOne.mockResolvedValue(published());
+      mockEnrollmentsService.hasActiveEnrollments.mockResolvedValue(false);
+
+      await service.setPublication('course-1', { isPublished: false });
+
+      expect(transactionManager.save).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'course-1', isPublished: false }),
+      );
+    });
+
+    it('should ask for confirmation before unpublishing a course with enrolled students', async () => {
+      transactionManager.findOne.mockResolvedValue(published());
+      mockEnrollmentsService.hasActiveEnrollments.mockResolvedValue(true);
+
+      await expect(
+        service.setPublication('course-1', { isPublished: false }),
+      ).rejects.toThrow(ConflictException);
+      expect(transactionManager.save).not.toHaveBeenCalled();
+    });
+
+    it('should unpublish a course with enrolled students after confirmation', async () => {
+      transactionManager.findOne.mockResolvedValue(published());
+
+      await service.setPublication('course-1', {
+        isPublished: false,
+        confirmUnpublishWithEnrollments: true,
+      });
+
+      expect(
+        mockEnrollmentsService.hasActiveEnrollments,
+      ).not.toHaveBeenCalled();
+      expect(transactionManager.save).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'course-1', isPublished: false }),
+      );
+    });
+
+    it('should change nothing when the course already has that state', async () => {
+      transactionManager.findOne.mockResolvedValue(published());
+
+      await service.setPublication('course-1', { isPublished: true });
+
+      expect(contentQueryBuilder.getExists).not.toHaveBeenCalled();
+      expect(transactionManager.save).not.toHaveBeenCalled();
+    });
+
+    it('should reject a course that does not exist', async () => {
+      transactionManager.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.setPublication('course-1', { isPublished: true }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -496,12 +739,21 @@ describe('CoursesService', () => {
     };
 
     it('should soft delete the course with its sections, lessons and content in one transaction', async () => {
-      mockCoursesRepo.findOne.mockResolvedValue({ ...course });
+      transactionManager.findOne.mockResolvedValue({ ...course });
+      mockEnrollmentsService.hasActiveEnrollments.mockResolvedValue(false);
       transactionManager.find.mockResolvedValue([{ id: 's-1' }, { id: 's-2' }]);
 
       await service.remove('course-1');
 
       expect(mockCoursesRepo.manager.transaction).toHaveBeenCalledTimes(1);
+      expect(transactionManager.findOne).toHaveBeenCalledWith(Course, {
+        where: { id: 'course-1' },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(mockEnrollmentsService.hasActiveEnrollments).toHaveBeenCalledWith(
+        'course-1',
+        transactionManager,
+      );
       expect(transactionManager.find).toHaveBeenCalledWith(Section, {
         where: { courseId: 'course-1' },
         select: { id: true },
@@ -523,12 +775,56 @@ describe('CoursesService', () => {
     });
 
     it('should reject deletion when the course does not exist', async () => {
-      mockCoursesRepo.findOne.mockResolvedValue(null);
+      transactionManager.findOne.mockResolvedValue(null);
 
       await expect(service.remove('missing-course')).rejects.toThrow(
         NotFoundException,
       );
-      expect(mockCoursesRepo.manager.transaction).not.toHaveBeenCalled();
+      expect(
+        mockEnrollmentsService.hasActiveEnrollments,
+      ).not.toHaveBeenCalled();
+      expect(transactionManager.softRemove).not.toHaveBeenCalled();
+    });
+
+    it('should reject deletion when the course has active enrollments', async () => {
+      transactionManager.findOne.mockResolvedValue({ ...course });
+      mockEnrollmentsService.hasActiveEnrollments.mockResolvedValue(true);
+
+      await expect(service.remove('course-1')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(softDeleteSectionLessons).not.toHaveBeenCalled();
+      expect(transactionManager.softDelete).not.toHaveBeenCalled();
+      expect(transactionManager.softRemove).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Course Enrollment Lookup', () => {
+    it('should share lock and return a published course', async () => {
+      const course = { id: 'course-1', isPublished: true };
+      transactionManager.findOne.mockResolvedValue(course);
+
+      await expect(
+        service.findPublishedCourseForEnrollment(
+          'course-1',
+          transactionManager as never,
+        ),
+      ).resolves.toBe(course);
+      expect(transactionManager.findOne).toHaveBeenCalledWith(Course, {
+        where: { id: 'course-1', isPublished: true },
+        lock: { mode: 'pessimistic_read' },
+      });
+    });
+
+    it('should reject a missing or unpublished course', async () => {
+      transactionManager.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.findPublishedCourseForEnrollment(
+          'course-1',
+          transactionManager as never,
+        ),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

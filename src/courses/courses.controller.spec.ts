@@ -20,6 +20,7 @@ describe('CoursesController', () => {
     getCourse: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
+    setPublication: vi.fn(),
     createThumbnailSignature: vi.fn(),
   };
 
@@ -138,6 +139,16 @@ describe('CoursesController', () => {
       title: 'New Title',
     });
     expect(result).toBeUndefined();
+  });
+
+  it('should update the publication without returning data', async () => {
+    const dto = { isPublished: false, confirmUnpublishWithEnrollments: true };
+    mockCoursesService.setPublication.mockResolvedValue(undefined);
+
+    await expect(
+      controller.updatePublication('c-1', dto),
+    ).resolves.toBeUndefined();
+    expect(mockCoursesService.setPublication).toHaveBeenCalledWith('c-1', dto);
   });
 
   it('should remove course through service', async () => {

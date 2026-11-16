@@ -22,7 +22,6 @@ describe('toSectionResponseDto', () => {
         id: 'course-1',
         instructorId: 'instructor-1',
       },
-      lessons: [],
     } as unknown as Section;
 
     const result = toSectionResponseDto(section);
@@ -41,5 +40,29 @@ describe('toSectionResponseDto', () => {
     expect(result).not.toHaveProperty('course');
     expect(result).not.toHaveProperty('lessons');
     expect(result).not.toHaveProperty('deletedAt');
+  });
+
+  it('should include the lessons when they are loaded', () => {
+    const section = {
+      id: 'section-1',
+      courseId: 'course-1',
+      title: 'Chapter 1',
+      orderIndex: 1,
+      lessons: [
+        {
+          id: 'lesson-1',
+          sectionId: 'section-1',
+          title: 'Lesson 1',
+          orderIndex: 1,
+          section: { id: 'section-1' },
+        },
+      ],
+    } as unknown as Section;
+
+    const { lessons } = toSectionResponseDto(section);
+
+    expect(lessons).toHaveLength(1);
+    expect(lessons?.[0]).toMatchObject({ id: 'lesson-1', title: 'Lesson 1' });
+    expect(lessons?.[0]).not.toHaveProperty('section');
   });
 });
